@@ -59,7 +59,7 @@ Delivery is the milestone of the build (`v0.x`). No milestone is published: the 
 | Spec | Scope | Delivery | Status |
 |---|---|---|---|
 | [`001-foundation`](001-foundation/) | package skeleton, `tlsvigil --version`, the local quality gate, CI, supply-chain hygiene, the documentation guards | `v0.1` | **done** |
-| `002-certificate` | the TLS check of `host:port`: verified handshake, days left, a failed verification as a finding; the offline test server | — | planned |
+| [`002-certificate`](002-certificate/) | the TLS check of `host:port`: verified handshake, days left, a failed verification as a finding; the offline test server | — | in progress |
 | `003-rdap` | the domain expiry over RDAP: the IANA bootstrap, the `expiration` event, bounded HTTPS requests | — | planned |
 | `004-config-and-output` | the TOML configuration, the text and `--json` output, `--lang en\|pt-BR` and the exit codes | — | planned |
 | `005-notifications` | one GitHub issue that is opened, updated and closed; Telegram and SMTP as optional channels; no duplicate warnings | — | planned |
