@@ -38,6 +38,8 @@ def test_a_tls_handshake_with_the_local_server_is_allowed(
 ) -> None:
     server = serve(ca.issue_cert("localhost"))
     client = ssl.create_default_context()
+    # The default since Python 3.10, written out so static analysis sees no TLS 1.0 or 1.1.
+    client.minimum_version = ssl.TLSVersion.TLSv1_2
     ca.configure_trust(client)
 
     with (
