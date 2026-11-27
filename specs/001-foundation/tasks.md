@@ -87,12 +87,16 @@ closes the gaps the design found, and Stage 3 is the acceptance on GitHub.
 
 ## Stage 3 — Acceptance on GitHub
 
-- [ ] The pull request of Stages 1 and 2 passes every job: `Quality` on 3.12 to 3.15 on Linux and
+- [x] The pull request of Stages 1 and 2 passes every job: `Quality` on 3.12 to 3.15 on Linux and
   Windows, `Package`, `Security (pip-audit)`, `Shell (shellcheck)`, CodeQL and dependency review.
-  — RF-03, RF-04, RF-05, RF-06
-- [ ] Prove the `package` guard bites: on a throwaway branch add a runtime dependency to
+  — RF-03, RF-04, RF-05, RF-06. Done on PR #2 (CI run 46070547105): 15 of 15 checks passed.
+- [x] Prove the `package` guard bites: on a throwaway branch add a runtime dependency to
   `[project].dependencies`, confirm the job fails with the dependency-free message, then delete the
-  branch (no PR merged). — RF-05, RNF-01
+  branch (no PR merged). — RF-05, RNF-01. Done on 2026-11-27: run 46070582838 on a throwaway
+  branch with `packaging>=24` failed `Package` with that message after `Requires-Dist: packaging>=24`;
+  the `Quality` jobs failed earlier, at `uv sync --locked`, because the lock was left as it was. The
+  branch was deleted.
 - [ ] On GitHub, the issue chooser shows the two forms and the private vulnerability link, and no
   blank issue. — RF-09
-- [ ] Quality gate: the CI of the pull request, with the run recorded here.
+- [x] Quality gate: the CI of the pull request, with the run recorded here. — green: CI run
+  46070547105 on PR #2, 15 of 15 checks
