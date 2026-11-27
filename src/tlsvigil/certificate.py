@@ -1,5 +1,5 @@
 """
-Certificate check: the result type, the TLS context and the classification (spec 002).
+Certificate check: the result type, the context, the check and the classification (spec 002).
 
 A check opens one verified TLS handshake to ``host:port`` and turns every way it can end into a
 :class:`CertificateResult` value: a verified certificate with its days left, an ``invalid`` one
@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import ipaddress
 import math
+import socket
 import ssl
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "InvalidReason",
     "Outcome",
     "Status",
+    "check_certificate",
     "classify",
     "create_context",
 ]
@@ -218,6 +220,158 @@ def create_context() -> ssl.SSLContext:
     # Browsers ignore the subject common name; only the SAN names the host.
     context.hostname_checks_common_name = False
     return context
+
+
+# ---------------------------------------------------------------------------
+# The check
+# ---------------------------------------------------------------------------
+
+# The OpenSSL `X509_V_ERR_*` number of a failed verification picks the reason, because the
+# message text changes between OpenSSL releases and the number does not (ADR-3). A code missing
+# here gives `OTHER`.
+_REASON_BY_VERIFY_CODE: dict[int, InvalidReason] = {
+    10: InvalidReason.EXPIRED,  # CERT_HAS_EXPIRED, for the leaf or any certificate of the chain
+    9: InvalidReason.NOT_YET_VALID,  # CERT_NOT_YET_VALID
+    62: InvalidReason.HOSTNAME_MISMATCH,  # HOSTNAME_MISMATCH
+    64: InvalidReason.HOSTNAME_MISMATCH,  # IP_ADDRESS_MISMATCH
+    2: InvalidReason.UNTRUSTED,  # UNABLE_TO_GET_ISSUER_CERT
+    18: InvalidReason.UNTRUSTED,  # DEPTH_ZERO_SELF_SIGNED_CERT
+    19: InvalidReason.UNTRUSTED,  # SELF_SIGNED_CERT_IN_CHAIN
+    20: InvalidReason.UNTRUSTED,  # UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+    21: InvalidReason.UNTRUSTED,  # UNABLE_TO_VERIFY_LEAF_SIGNATURE
+}
+
+_ONE_DAY = timedelta(days=1)
+
+
+def _message(exc: BaseException) -> str:
+    """
+    Give the text of ``exc`` as the library wrote it, or its type when the text is empty.
+
+    Args:
+        exc (BaseException): The exception the check caught.
+
+    Returns:
+        str: A non-empty message.
+    """
+    return str(exc) or type(exc).__name__
+
+
+def _first_issuer_value(issuer: object, key: str) -> str | None:
+    """
+    Give the first value of ``key`` in an issuer name as :mod:`ssl` decoded it (RNF-03).
+
+    Args:
+        issuer (object): The ``issuer`` entry of :meth:`ssl.SSLSocket.getpeercert`: a tuple of
+            relative distinguished names, each a tuple of ``(name, value)`` pairs.
+        key (str): An attribute name, such as ``organizationName`` or ``commonName``.
+
+    Returns:
+        str | None: The value as read, or ``None`` when the issuer has none.
+    """
+    if not isinstance(issuer, tuple):
+        return None
+    for rdn in issuer:
+        for name, value in rdn:
+            if name == key and isinstance(value, str):
+                return value
+    return None
+
+
+def check_certificate(
+    host: str,
+    port: int = 443,
+    *,
+    timeout: float = 10.0,
+    now: datetime | None = None,
+    context: ssl.SSLContext | None = None,
+) -> CertificateResult:
+    """
+    Open one verified TLS handshake to ``host:port`` and report what it gave (RF-01, RF-03).
+
+    Every way a check can end comes back as a value: the function raises only for bad
+    arguments. One connection is made, to the first address of the name that accepts; nothing
+    is retried, nothing is written after the handshake, and both sockets are closed on every
+    path.
+
+    Args:
+        host (str): A DNS name or an IP address, without scheme, path, brackets or port. It is
+            sent as the SNI name and matched against the certificate's alternative names.
+        port (int): The TCP port, from ``1`` to ``65535``.
+        timeout (float): Seconds for the connection and for each step of the handshake, a
+            finite number greater than ``0`` (ADR-6).
+        now (datetime | None): The time to count the days left from, aware; ``None`` means the
+            current time. The verification itself always uses the system clock.
+        context (ssl.SSLContext | None): The client context; ``None`` means
+            :func:`create_context`. The tests pass one that also trusts their own CA (ADR-7).
+
+    Returns:
+        CertificateResult: ``VERIFIED`` with the expiry and the days left, ``INVALID`` with the
+            reason of the failed verification, or ``ERROR`` with the kind of failure.
+
+    Raises:
+        ValueError: When an argument is bad; no socket exists yet then (RF-06).
+    """
+    _validate(host, port, timeout, now)
+    checked_at = datetime.now(UTC) if now is None else now.astimezone(UTC)
+    if context is None:
+        context = create_context()
+
+    def error(kind: ErrorKind, exc: BaseException) -> CertificateResult:
+        """Build the result of a host that could not be checked."""
+        return CertificateResult(
+            host, port, checked_at, Outcome.ERROR, error_kind=kind, message=_message(exc)
+        )
+
+    try:
+        sock = socket.create_connection((host, port), timeout=timeout)
+    except socket.gaierror as exc:
+        return error(ErrorKind.DNS, exc)
+    except ConnectionRefusedError as exc:
+        return error(ErrorKind.REFUSED, exc)
+    except TimeoutError as exc:
+        return error(ErrorKind.TIMEOUT, exc)
+    except OSError as exc:
+        return error(ErrorKind.OTHER, exc)
+
+    with sock:
+        try:
+            # The handshake runs inside wrap_socket, under the socket's timeout (ADR-6).
+            with context.wrap_socket(sock, server_hostname=host) as tls:
+                cert = tls.getpeercert()
+        except ssl.SSLCertVerificationError as exc:
+            return CertificateResult(
+                host,
+                port,
+                checked_at,
+                Outcome.INVALID,
+                reason=_REASON_BY_VERIFY_CODE.get(exc.verify_code, InvalidReason.OTHER),
+                message=exc.verify_message or _message(exc),
+            )
+        except TimeoutError as exc:
+            return error(ErrorKind.TIMEOUT, exc)
+        except OSError as exc:  # ssl.SSLError is an OSError: a protocol or version failure
+            return error(ErrorKind.TLS, exc)
+
+    not_after_text = cert.get("notAfter") if cert else None
+    if cert is None or not isinstance(not_after_text, str):
+        # A verified handshake carries the expiry; a peer certificate without one is reported,
+        # never guessed.
+        return error(ErrorKind.OTHER, ValueError("the certificate carries no expiry date"))
+    not_after = datetime.fromtimestamp(ssl.cert_time_to_seconds(not_after_text), UTC)
+    issuer = cert.get("issuer")
+    return CertificateResult(
+        host,
+        port,
+        checked_at,
+        Outcome.VERIFIED,
+        not_after=not_after,
+        # Rounded down, so the last 24 hours read as 0; the max only matters when `now` is later
+        # than an expiry the system clock still accepts (RF-01).
+        days_left=max(0, (not_after - checked_at) // _ONE_DAY),
+        issuer_organization=_first_issuer_value(issuer, "organizationName"),
+        issuer_common_name=_first_issuer_value(issuer, "commonName"),
+    )
 
 
 # ---------------------------------------------------------------------------
