@@ -3,8 +3,9 @@ Shared fixtures of the test suite: the network guard, the test CA and the local 
 
 No test reaches a real network (``specs/README.md``, "How a spec is tested"): the autouse
 ``network_guard`` installs :mod:`network_guard` for every test. The certificates are made during
-the test with ``trustme`` (spec 002, ADR-4), and ``serve`` starts a
-:class:`~tls_server.LocalServer` on ``127.0.0.1`` for one of them.
+the test with ``trustme`` (spec 002, ADR-4), ``serve`` starts a :class:`~tls_server.LocalServer`
+on ``127.0.0.1`` for one of them, and ``client_context`` is the context of the check with the test
+CA added as a trust anchor.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import trustme
 from certs import PemLeaf
 from network_guard import NetworkGuard, install
 from tls_server import LocalServer
+from tlsvigil.certificate import create_context
 
 # What `serve` accepts: a trustme leaf, or one of the certificates of `certs.py`.
 Leaf = trustme.LeafCert | PemLeaf
@@ -62,6 +64,23 @@ def ca() -> trustme.CA:
     return trustme.CA()
 
 
+@pytest.fixture
+def client_context(ca: trustme.CA) -> ssl.SSLContext:
+    """
+    Build the context the check uses, trusting the test CA as well.
+
+    Args:
+        ca (trustme.CA): The test's CA, added as one more trust anchor.
+
+    Returns:
+        ssl.SSLContext: :func:`~tlsvigil.certificate.create_context` with ``ca`` trusted, so
+            the tests run the real settings of the check (spec 002, ADR-7).
+    """
+    context = create_context()
+    ca.configure_trust(context)
+    return context
+
+
 def _pem_files(leaf: Leaf, *, full_chain: bool, directory: Path) -> tuple[Path, Path]:
     """
     Write the certificate chain and the private key of ``leaf`` to two PEM files.
@@ -98,19 +117,26 @@ def serve(tmp_path: Path) -> Iterator[Callable[..., LocalServer]]:
         tmp_path (Path): Holds the PEM files the servers load.
 
     Yields:
-        Callable[..., LocalServer]: ``start(leaf, full_chain=True)``, which starts a server on
-            ``127.0.0.1`` presenting ``leaf`` and returns it.
+        Callable[..., LocalServer]: ``start(leaf, full_chain=True, configure=None)``, which
+            starts a server on ``127.0.0.1`` presenting ``leaf`` and returns it.
     """
     numbers = itertools.count()
     with ExitStack() as stack:
 
-        def start(leaf: Leaf, *, full_chain: bool = True) -> LocalServer:
+        def start(
+            leaf: Leaf,
+            *,
+            full_chain: bool = True,
+            configure: Callable[[ssl.SSLContext], None] | None = None,
+        ) -> LocalServer:
             """
             Start a server presenting ``leaf``; it stops when the test ends.
 
             Args:
                 leaf (Leaf): The certificate to serve.
                 full_chain (bool): ``False`` to send the leaf without its intermediates.
+                configure (Callable[[ssl.SSLContext], None] | None): Changes the server
+                    context before the server starts, such as the TLS versions it accepts.
 
             Returns:
                 LocalServer: The running server.
@@ -120,6 +146,8 @@ def serve(tmp_path: Path) -> Iterator[Callable[..., LocalServer]]:
             cert_file, key_file = _pem_files(leaf, full_chain=full_chain, directory=directory)
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.load_cert_chain(cert_file, key_file)
+            if configure is not None:
+                configure(context)
             return stack.enter_context(LocalServer("tls", context))
 
         yield start

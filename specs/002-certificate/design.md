@@ -370,3 +370,22 @@ runner reports as `untrusted` can verify on a Windows machine that has the inter
    configuration fails on every host, not only on the verified ones), and refuses a verified
    result without days left with `ValueError`. The check never builds such a result; the guard
    is for one built by hand.
+4. **RF-07: the `serve` fixture takes a `configure` hook.** `start(leaf, configure=...)` changes
+   the server context before the server starts; the TLS 1.1 test uses it to limit the server to
+   TLS 1.1 at `@SECLEVEL=0`. The other tests leave it out.
+5. **RF-01, RNF-03: the common name is read from a trusted self-signed leaf.** A `trustme` CA names
+   an organization and a unit but no common name, so the issuer test of a `trustme` chain reads
+   the organization (and no common name), and a self-signed leaf added to the context as a trust
+   anchor gives a common name with no organization.
+6. **RF-04, RF-08: three failures are injected.** Loopback never times out on connect, is never
+   unreachable, and a verified handshake always carries `notAfter` and an issuer, so these tests
+   patch `socket.create_connection` (a `TimeoutError`, an `OSError` with `ENETUNREACH`) or
+   `ssl.SSLSocket.getpeercert` (no `notAfter`, no issuer). The paths they reach are the
+   `except` branches and the guards of the flow above; the real handshake still runs in the
+   `getpeercert` cases.
+7. **RF-07: `LocalServer` also listens on `::1`.** `localhost` resolves to `::1` first on many
+   machines; with a listener on `127.0.0.1` only, each check of `localhost` was first refused on
+   `::1`, which on Windows costs about two seconds (42 s for the suite of this stage). The server
+   now binds `::1` on the same port when the machine has IPv6, accepting on both through
+   `selectors`; when that bind fails, the tests still pass, only slower. `host` stays
+   `127.0.0.1`, and the counter counts the connections of both addresses.
