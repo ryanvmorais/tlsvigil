@@ -84,36 +84,58 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 2 — The check against the local server
 
-- [ ] `src/tlsvigil/certificate.py`: `check_certificate(...)`: validation, `create_connection`,
+- [x] `src/tlsvigil/certificate.py`: `check_certificate(...)`: validation, `create_connection`,
   `wrap_socket` with `server_hostname`, the exception-to-result mapping of the design's flow, the
   verification-code table, the days left with `max(0, …)`, the issuer names; both sockets in
-  `with` blocks. — RF-01, RF-03, RF-04, RF-05, RNF-03, ADR-1, ADR-3, ADR-6
-- [ ] `tests/test_certificate.py`, verified: 90 days; `N` days plus one hour gives `N`; two hours
+  `with` blocks. — RF-01, RF-03, RF-04, RF-05, RNF-03, ADR-1, ADR-3, ADR-6. The message of an
+  `invalid` result is `verify_message`, falling back to the exception text; an empty exception
+  text falls back to its type, so `message` is never empty.
+- [x] `tests/test_certificate.py`, verified: 90 days; `N` days plus one hour gives `N`; two hours
   gives `0`; the issuer organization and common name are read; an IP certificate checked as
-  `127.0.0.1`; a leaf without an Authority Key Identifier verifies. — RF-01, RF-05, RNF-02, RF-08
-- [ ] `tests/test_certificate.py`, invalid: expired, not yet valid, issued for `other.test` and
+  `127.0.0.1`; a leaf without an Authority Key Identifier verifies. — RF-01, RF-05, RNF-02, RF-08.
+  Also a second short of 30 days (`29`), a `now` later than the expiry (`0`, the `max`), a `now`
+  in another time zone kept in UTC, and the default context refusing the test CA (the positive
+  control of `client_context`). A `trustme` CA has no common name, so the common name is read
+  from a trusted self-signed leaf (design, deviation 5).
+- [x] `tests/test_certificate.py`, invalid: expired, not yet valid, issued for `other.test` and
   checked as `localhost`, issued for `localhost` and checked as `127.0.0.1`, self-signed, signed by
   an untrusted CA, leaf sent without its intermediate; each asserts the reason, a non-empty
   message, `None` for `days_left` and `not_after`, and one accepted connection on the server.
-  — RF-03, RF-08
-- [ ] `tests/test_certificate.py`, error: refused (a bound-then-closed port, timeout 5 s), timeout
+  — RF-03, RF-08. The same leaf sent with its intermediate verifies (positive control).
+- [x] `tests/test_certificate.py`, error: refused (a bound-then-closed port, timeout 5 s), timeout
   (`silent` server, 0.2 s), not TLS (`plain` server), a name that does not resolve (`getaddrinfo`
   patched to raise `gaierror`); each asserts the kind, a message and `None` for `days_left`;
   dates relative to one `now` per test.
-  — RF-04, RF-05, RF-08, RNF-04
-- [ ] `tests/test_certificate.py`, TLS 1.1: the positive control with a client context that allows
+  — RF-04, RF-05, RF-08, RNF-04. Three failures loopback cannot produce are injected (design,
+  deviation 6): a connect timeout and an unreachable network through `create_connection`, and a
+  peer certificate without `notAfter` (or without an issuer) through `getpeercert`.
+- [x] `tests/test_certificate.py`, TLS 1.1: the positive control with a client context that allows
   TLS 1.1 (skipped when the platform cannot complete it), then `error` `tls` with the default
-  context; the `ssl` deprecation warnings caught in that test only. — RF-05, RF-08
-- [ ] `tests/test_certificate.py`, validation: the parametrized bad hosts, ports, timeouts and a
+  context; the `ssl` deprecation warnings caught in that test only. — RF-05, RF-08. The control
+  completed on Python 3.15.2 on Windows (no skip); the `serve` fixture gained a `configure` hook
+  for the server context (design, deviation 4).
+- [x] `tests/test_certificate.py`, validation: the parametrized bad hosts, ports, timeouts and a
   naive `now` raise `ValueError` with no connect call recorded by the guard; a valid call to the
-  local server is the control. — RF-06, RF-08
-- [ ] See the new tests fail once: remove the `max(0, …)`, move code 62 to `untrusted`, delete
+  local server is the control. — RF-06, RF-08. 26 bad arguments, each asserting that the message
+  names the argument and that the guard recorded no lookup and no connect; three IPv6 addresses
+  pass `_validate` as the control of the `:` rule.
+- [x] See the new tests fail once: remove the `max(0, …)`, move code 62 to `untrusted`, delete
   `except TimeoutError`, map every `SSLError` to `other`, remove the `:` rule from the validation;
   each goes red on the test that guards it, then the change is undone. — RF-01, RF-03, RF-04,
-  RF-06
-- [ ] Coverage of `src/tlsvigil/certificate.py` at 100% of lines and branches, or each missing
-  branch marked and explained in the code. — RF-08
-- [ ] Quality gate.
+  RF-06. Done on 2026-11-27 on Python 3.15.2, ten runs, each red on the test that guards it: no
+  `max` (the later-`now` test); code 62 and code 64 to `untrusted` (the another-name and the
+  name-by-address cases); no `except TimeoutError` after the handshake (the `silent` server) and
+  after the connect (the injected timeout); every `SSLError` to `other` (the `plain` server and
+  TLS 1.1); every verification to `other` (the seven invalid cases and the default-context test);
+  no `:` rule (the two host-with-port cases); `now` not converted to UTC (its test); the issuer
+  key ignored (the two issuer tests).
+- [x] Coverage of `src/tlsvigil/certificate.py` at 100% of lines and branches, or each missing
+  branch marked and explained in the code. — RF-08. 100% of lines and branches, with no branch
+  marked.
+- [x] Quality gate. — green on Python 3.15.2 on 2026-11-27: ruff and black clean, mypy no issues
+  in 19 files, 101 passed in 6 s, 100% coverage of `src/tlsvigil`. The slowest test is the
+  refused port (2 s, the Windows loopback); the other checks take under 0.1 s each once the local
+  server also listens on `::1` (design, deviation 7).
 
 ## Stage 3 — Documentation and closing
 
