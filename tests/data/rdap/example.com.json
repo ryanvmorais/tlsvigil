@@ -1,0 +1,31 @@
+{
+  "rdapConformance": ["rdap_level_0", "icann_rdap_response_profile_1", "icann_rdap_technical_implementation_guide_1"],
+  "objectClassName": "domain",
+  "handle": "0000000_DOMAIN_COM-EXAMPLE",
+  "ldhName": "EXAMPLE.COM",
+  "status": ["client delete prohibited", "client transfer prohibited", "client update prohibited"],
+  "entities": [
+    {
+      "objectClassName": "entity",
+      "handle": "0000",
+      "roles": ["registrar"]
+    }
+  ],
+  "events": [
+    {"eventAction": "registration", "eventDate": "1995-08-14T04:00:00Z"},
+    {"eventAction": "expiration", "eventDate": "2027-08-13T04:00:00Z"},
+    {"eventAction": "last update of RDAP database", "eventDate": "2026-11-27T11:55:00Z"}
+  ],
+  "secureDNS": {"delegationSigned": false},
+  "links": [
+    {
+      "value": "https://rdap.example/com/v1/domain/EXAMPLE.COM",
+      "rel": "self",
+      "href": "https://rdap.example/com/v1/domain/EXAMPLE.COM",
+      "type": "application/rdap+json"
+    }
+  ],
+  "notices": [
+    {"title": "Terms of Use", "description": ["A hand-written answer for the tests."]}
+  ]
+}

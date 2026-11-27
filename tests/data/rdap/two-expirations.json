@@ -1,0 +1,11 @@
+{
+  "objectClassName": "domain",
+  "ldhName": "example.com",
+  "status": ["active"],
+  "entities": [{"objectClassName": "entity", "handle": "0000", "roles": ["registrar"]}],
+  "events": [
+    {"eventAction": "expiration", "eventDate": "2027-08-13T04:00:00Z"},
+    {"eventAction": "registration", "eventDate": "1995-08-14T04:00:00Z"},
+    {"eventAction": "expiration", "eventDate": "2027-02-13T04:00:00Z"}
+  ]
+}

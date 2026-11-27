@@ -43,45 +43,52 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 1 — Types, validation, bootstrap, answer and classification
 
-- [ ] `src/tlsvigil/rdap.py`: the module docstring, the constants, the four `StrEnum`s, the frozen
+- [x] `src/tlsvigil/rdap.py`: the module docstring, the constants, the four `StrEnum`s, the frozen
   `DomainResult` and `Bootstrap`, as in the design's data model and interfaces. — RF-01, RF-03,
   RF-04, RF-05, ADR-1
-- [ ] `src/tlsvigil/rdap.py`: `_normalize_domain(domain)` and the checks of `RdapClient.__init__`
+- [x] `src/tlsvigil/rdap.py`: `_normalize_domain(domain)` and the checks of `RdapClient.__init__`
   (timeout, `bootstrap_url`) and of `now`, with the rules of the design's "Validation". — RF-07
-- [ ] `src/tlsvigil/rdap.py`: the bootstrap parser (the `services` shape, the base URL filter, the
+- [x] `src/tlsvigil/rdap.py`: the bootstrap parser (the `services` shape, the base URL filter, the
   appended `/`) and `Bootstrap.base_url_for(name)` by the longest suffix. — RF-03, RF-04
-- [ ] `src/tlsvigil/rdap.py`: the reading of a domain answer (`json.loads` with `ValueError` and
+- [x] `src/tlsvigil/rdap.py`: the reading of a domain answer (`json.loads` with `ValueError` and
   `RecursionError` caught, `objectClassName`, `ldhName`, `status`, the `expiration` events, the
   date parsing, the earliest date, the days left by floor division), as a function that takes the
   body, the name, the server and `now` and returns a `DomainResult`. — RF-01, RF-03, RF-05,
   RNF-03, RNF-04, ADR-8
-- [ ] `src/tlsvigil/rdap.py`: `classify(result, warn_days)`. — RF-02
-- [ ] `tests/test_rdap_validation.py`: the parametrized bad names, timeouts, an `http://`
+- [x] `src/tlsvigil/rdap.py`: `classify(result, warn_days)`. — RF-02
+- [x] `tests/test_rdap_validation.py`: the parametrized bad names, timeouts, an `http://`
   bootstrap URL and a naive `now`, each raising `ValueError`; `pão.com.br` with the `xn--` hint in
   the message; `Example.COM.` normalized to `example.com` as the control. — RF-07, RF-09
-- [ ] `tests/test_rdap_bootstrap.py`: a valid document; a service whose only URL is `http://`, one
+- [x] `tests/test_rdap_bootstrap.py`: a valid document; a service whose only URL is `http://`, one
   with user information, a query or a fragment, dropped; the `/` appended; `br` against `com.br`
   chosen by the longest suffix; a top-level domain absent; a document that is not an object, has
   no `services`, or has a malformed pair, refused as a whole. — RF-03, RF-04, RF-09
-- [ ] `tests/test_rdap_answer.py`: the reading of the documents in `tests/data/rdap/` with a
+- [x] `tests/test_rdap_answer.py`: the reading of the documents in `tests/data/rdap/` with a
   fixed `now`: 90 days, `N` days plus one hour, two hours (`0`), one hour ago (`-1`), two
   `expiration` events; no `expiration` event (`no_expiration`); not JSON, `objectClassName` of
   `entity`, another `ldhName`, no `ldhName`, an unreadable, a naive and an out-of-range date, a
   lowercase `t` and `z` read; 300 000 nested `[`; markup and control characters in `ldhName` case
   and `status` kept as read. — RF-01, RF-03, RF-05, RNF-03, RNF-04, RF-09. This file is not in the
-  design's layout (the design tests the reading through the local server); it is recorded as a
-  deviation.
-- [ ] `tests/data/rdap/`: the hand-written answers (dated `.com.br` and `.com`, two `expiration`
+  design's layout (the design tests the reading through the local server); it is recorded as
+  deviation 4.
+- [x] `tests/data/rdap/`: the hand-written answers (dated `.com.br` and `.com`, two `expiration`
   events, no `expiration` event), with entities that carry a handle and roles only. — RF-08
-- [ ] `tests/test_rdap_classify.py`: `days_left` `N - 1`, `N`, `N + 1`, `-1` with threshold `0`;
+- [x] `tests/test_rdap_classify.py`: `days_left` `N - 1`, `N`, `N + 1`, `-1` with threshold `0`;
   `undated` and `error` with thresholds `0` and `365`; a negative, `float` and `bool` threshold; a
   dated result without `days_left`. — RF-02, RF-09
-- [ ] See the new tests fail once: the floor division turned into `round`, `min` turned into
+- [x] See the new tests fail once: the floor division turned into `round`, `min` turned into
   `max` over the events, the `https` filter of the bootstrap removed, the longest suffix turned
   into the shortest, the `ldhName` comparison removed, `RecursionError` left uncaught, the
   `xn--` rule removed, `<` turned into `<=` in `classify`; each goes red on the test that guards
-  it, then the change is undone. — RF-01 to RF-04, RF-07
-- [ ] Quality gate. — <result>
+  it, then the change is undone. — RF-01 to RF-04, RF-07. Also sabotaged, each red on its own
+  test: the user information, query and fragment filter removed, the `/` not appended, a
+  malformed service skipped instead of refusing the document, `RecursionError` left uncaught in
+  the bootstrap, the `ldhName` compared without lowercasing, the `objectClassName` check removed,
+  a naive date accepted, `OverflowError` left uncaught, the date read without uppercasing, an
+  unreadable date skipped, the 253-character limit removed, a numeric last label accepted, the
+  trailing dot kept, a `bool` timeout accepted, an `http://` bootstrap URL accepted, a naive
+  `now` accepted, the threshold checked after the outcome.
+- [x] Quality gate. — 294 passed (183 new) in 10 s; ruff/black/mypy green; `src` at 100%
 
 ## Stage 2 — The request and the check against the local server
 

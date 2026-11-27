@@ -465,6 +465,20 @@ domain object, and the `.br` and `.com` answers carry it.
    `Content-Type: application/rdap+json`. The server also records the method of each request and
    offers `url(path)` and `RecordedRequest.header(name)`. Each rule has a test in
    `tests/test_http_server.py`, as do `silent`, `drip` and `endless`.
+4. **RF-01, RF-03, RF-05: the reading of the answer has its own tests.** `tests/test_rdap_answer.py`
+   is not in the module layout. It feeds the documents of `tests/data/rdap/` to the reading
+   function with a fixed `now`, so every date, shape and hostile body is tested without a server;
+   `test_rdap_check.py` keeps the cases that need one (the request, the bootstrap fetch, the
+   errors of the network).
+5. **RF-04: the bootstrap filter is a little stricter.** A URL whose port is not a number in range,
+   or whose host has an unbalanced `[`, is dropped like one without a host, and a URL whose scheme
+   is written in capitals is dropped as not starting with `https://`. An entry loses one trailing
+   dot before it is split, as a domain does (RF-07).
+6. **RF-03: malformed optional members are read as absent.** An `events` member that is not a
+   list, and items of it that are not objects, are skipped, so a record without a usable
+   `expiration` event is `no_expiration`; an `expiration` event whose `eventDate` is missing or not
+   a string is `invalid_response`, like an unreadable date. A date that `fromisoformat` reads but
+   that leaves the range of `datetime` once moved to UTC (`OverflowError`) is out of range.
 
 ## Implementation notes
 
@@ -476,3 +490,8 @@ domain object, and the `.br` and `.com` answers carry it.
   a `ConnectionResetError`, when the client's close arrives before its alert; the test accepts
   either as an `OSError`. The ten harness tests run in about 1.5 s and passed twenty runs in a
   row on Windows and Python 3.15.
+- **Stage 1:** `rdap.py` holds the types, the validation, the bootstrap parser and the reading of
+  the answer, with no socket yet; `RdapClient` validates its timeout and bootstrap URL, and its
+  `context` argument and `check_domain` arrive with the request in Stage 2. Until then the tests
+  call the private functions (`_normalize_domain`, `_validate_now`, `_parse_bootstrap`,
+  `_read_domain_answer`) directly. The 183 tests of the stage run in under half a second.
