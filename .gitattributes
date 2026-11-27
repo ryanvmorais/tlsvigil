@@ -1,0 +1,7 @@
+# Normalize line endings: LF in the repo and on checkout, on every OS. It matters on Windows
+# (autocrlf), where a CR in a `.sh` file or in a Git hook breaks its execution.
+* text=auto eol=lf
+
+*.png binary
+*.gif binary
+*.webp binary

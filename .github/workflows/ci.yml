@@ -1,0 +1,161 @@
+# CI pipeline (GitHub Actions). Four independent jobs, each mirroring a slice of the local
+# quality gate (.githooks/pre-commit) so that a green check means the same as a clean checkout:
+#   quality   ruff, black, mypy and pytest on every Python the classifiers claim, 3.12 (the floor)
+#             to 3.15 (the newest stable), on Linux and on Windows
+#   package   `uv build`: the metadata renders on PyPI, the wheel has no runtime dependency, and
+#             it installs and runs in a clean environment (the release ships this exact build)
+#   security  pip-audit over uv.lock (known CVEs in the locked graph)
+#   shell     shellcheck over the versioned Git hook
+#
+# The repository is public, so Actions minutes are free: it runs on pull requests, on every push
+# to main (the merge commit is checked too) and by hand.
+name: CI
+
+on:
+  # The merge commit is checked too, so main is never red by surprise.
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only by default; a job that needs more declares it itself (none does today).
+permissions:
+  contents: read
+
+# A new push to the same pull request cancels the run that is now obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    # The Linux names stay "Quality (Python X)": the ruleset requires 3.12 and 3.15 by that name.
+    name: Quality (${{ matrix.label }}Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every Python in the classifiers runs on both systems, so "OS Independent" is tested, not
+        # just declared; the floor is requires-python in pyproject.toml.
+        python-version: ["3.12", "3.13", "3.14", "3.15"]
+        os: [linux, windows]
+        # Each include matches every combination of its `os` and only adds the runner and the label.
+        include:
+          - os: linux
+            runner: ubuntu-26.04
+            label: ""
+          # The one exception to the ubuntu-26.04 rule: Windows is where the console encoding, the
+          # file modes and the paths differ.
+          - os: windows
+            runner: windows-2025
+            label: "Windows, "
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No later step needs the GitHub token; it is not left on disk.
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Show Python version
+        run: uv run python -c "import sys; print(sys.version)"
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Black
+        run: uv run black --check .
+
+      - name: Mypy
+        run: uv run mypy
+
+      - name: Pytest
+        run: uv run pytest --cov
+
+  package:
+    name: Package
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No later step needs the GitHub token; it is not left on disk.
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          python-version: "3.12"
+
+      - name: Build the sdist and the wheel
+        run: uv build
+
+      # Same 7-day cooldown as pip-audit: a release of the tool that was just published (and may be
+      # compromised) does not run in CI until it has aged.
+      - name: The metadata renders on PyPI
+        run: uvx --exclude-newer "7 days" twine check --strict dist/*
+
+      # Zero runtime dependencies is a design decision (ADR-1, standard library only): a
+      # `Requires-Dist` line in the wheel means someone added a dependency by accident.
+      - name: The wheel declares no runtime dependency
+        run: |
+          if unzip -p dist/*.whl '*.dist-info/METADATA' | grep -E '^Requires-Dist:'; then
+            echo "::error::the wheel declares a runtime dependency; TLSVigil must stay dependency-free"
+            exit 1
+          fi
+
+      - name: The wheel installs in a clean environment and runs
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/clean"
+          uv pip install --python "$RUNNER_TEMP/clean" dist/*.whl
+          "$RUNNER_TEMP/clean/bin/tlsvigil" --version
+
+  security:
+    name: Security (pip-audit)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No later step needs the GitHub token; it is not left on disk.
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+
+      - name: Export uv.lock to requirements
+        run: uv export --frozen --no-emit-project --no-hashes --all-groups --all-extras -o requirements-audit.txt
+
+      # --no-deps: the export already has the full, locked graph; without it pip-audit would
+      # resolve again and audit a set that is not the lock's.
+      - name: pip-audit (known CVEs)
+        run: uvx --exclude-newer "7 days" pip-audit --requirement requirements-audit.txt --no-deps --disable-pip
+
+  shell:
+    name: Shell (shellcheck)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No later step needs the GitHub token; it is not left on disk.
+          persist-credentials: false
+
+      # The runner image ships shellcheck; the install only runs if a future image drops it.
+      - name: Ensure shellcheck
+        run: command -v shellcheck || (sudo apt-get update -q && sudo apt-get install -y -q shellcheck)
+
+      - name: Shellcheck the Git hook
+        run: shellcheck --version && shellcheck .githooks/pre-commit

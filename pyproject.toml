@@ -1,0 +1,175 @@
+# =============================================================================
+# Project configuration (PEP 621) — built with Hatchling, managed with uv.
+#
+#   [project]                 metadata; no runtime dependencies (stdlib only, ADR-1)
+#   [dependency-groups] dev   lint / type / test tooling (installed by default)
+#   [tool.*]                  config for uv, ruff, black, mypy, coverage, pytest
+#
+# Exact versions of the dev tooling are pinned in uv.lock (`uv lock`); the lines
+# below are lower-bound floors only.
+# =============================================================================
+
+[project]
+name = "tlsvigil"
+version = "1.0.0.dev0"
+description = "Get warned before a TLS certificate or a domain expires — runs on your own GitHub Actions."
+# Assembled at build time (see [tool.hatch.metadata.hooks.fancy-pypi-readme]): PyPI cannot resolve
+# the README's relative images and links, so the build rewrites them to absolute GitHub URLs.
+dynamic = ["readme"]
+# 3.12 is the system Python of Ubuntu 24.04 LTS, where `pipx install` runs (ADR-5).
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Ryan Morais" }]
+keywords = [
+    "tls",
+    "ssl",
+    "certificate",
+    "certificate-expiry",
+    "domain-expiry",
+    "rdap",
+    "monitoring",
+    "github-actions",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Internet",
+    "Topic :: Security",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+]
+
+# Standard library only (ADR-1): a monitoring tool that runs in other people's CI keeps its
+# supply chain to the interpreter itself.
+dependencies = []
+
+[project.scripts]
+tlsvigil = "tlsvigil.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ryanvmorais/tlsvigil"
+Repository = "https://github.com/ryanvmorais/tlsvigil"
+Issues = "https://github.com/ryanvmorais/tlsvigil/issues"
+
+[dependency-groups]
+dev = [
+    # Lint / format / types.
+    "ruff>=0.17.6",
+    "black>=26.10.1",
+    "mypy>=2.4.1",
+    # Test runner and coverage.
+    "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
+]
+
+# --- Packaging (Hatchling) ---------------------------------------------------
+[build-system]
+requires = ["hatchling", "hatch-fancy-pypi-readme"]
+build-backend = "hatchling.build"
+
+# The source distribution is the package plus what a packager needs to read the project. The
+# tests, the specs, the CI and the local caches live in the repository only.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/README.md",
+    "/LICENSE",
+    "/SECURITY.md",
+]
+
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+# Images first (they need the raw file, not the GitHub page), then every other relative link.
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '(!\[[^\]]*\]\()(?!https?://)([^)\s]+)'
+replacement = '\1https://raw.githubusercontent.com/ryanvmorais/tlsvigil/main/\2'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '(\]\()(?!https?://|#|mailto:)([^)\s]+)'
+replacement = '\1https://github.com/ryanvmorais/tlsvigil/blob/main/\2'
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tlsvigil"]
+
+# --- Resolution (uv) ---------------------------------------------------------
+# `uv lock` only takes a release that has been public for a week: the same cooldown as Dependabot,
+# so a hijacked release is usually pulled before it reaches the lock. A security fix younger than
+# that is let in for its one package with `exclude-newer-package`.
+[tool.uv]
+exclude-newer = "7 days"
+# Floor without a ceiling: an older uv that cannot read the relative duration above fails with a
+# clear message instead of resolving with no cutoff.
+required-version = ">=0.13"
+
+# --- Lint (ruff: replaces flake8 + isort, reads pyproject natively) ----------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, pyupgrade, bugbear, flake8-simplify,
+# flake8-comprehensions, ruff-native, pydocstyle (D213 by name: the Google convention turns it off).
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D", "D213"]
+ignore = [
+    "D212",  # the house style opens a docstring with a lone `"""` and the summary on the next line (D213)
+    "D205",  # the summary may be a paragraph that wraps, followed by a blank line
+]
+
+[tool.ruff.lint.per-file-ignores]
+# A test's name says what it proves; only the non-obvious ones carry a one-line docstring.
+"tests/**" = ["D103"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tlsvigil"]
+
+[tool.ruff.lint.pydocstyle]
+# Google sections (`Args:`, `Returns:`, `Raises:`), as in the docstrings.
+convention = "google"
+
+# --- Format (black) ---------------------------------------------------------
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+# --- Types (mypy, strict) --------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+# `strict` leaves these out; the house set catches real bugs with little noise.
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool", "possibly-undefined"]
+# The tests and the Claude Code hooks are typed too: they are small enough to keep that cheap.
+files = ["src", "tests", ".claude/hooks"]
+
+# --- Coverage (pytest-cov) -------------------------------------------------
+# Not part of the default `pytest` run: `uv run pytest --cov` measures it.
+[tool.coverage.run]
+source = ["src/tlsvigil"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+# --- Tests (pytest) --------------------------------------------------------
+[tool.pytest]
+strict = true  # strict_config, strict_markers, strict_xfail, strict_parametrization_ids
+addopts = ["-ra", "--durations=15"]  # the 15 slowest tests end every run, so a new slow one shows up
+testpaths = ["tests"]
+filterwarnings = ["error"]  # a warning fails the run; a one-off exception comes with its reason

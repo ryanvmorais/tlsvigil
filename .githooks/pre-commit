@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Git pre-commit hook (versioned): the project's quality gate.
+#
+# Runs the same sequence as the CI in CHECK mode (it changes no file: formatting
+# happens while editing). Any failing step aborts the commit.
+#
+# Activation (once per clone):
+#     git config core.hooksPath .githooks
+#
+# Requires: uv on the PATH (`uv run` syncs the environment from uv.lock).
+
+set -euo pipefail
+
+#######################################
+# Run one gate step, announcing it first.
+# Arguments:
+#   The step label, then the command and its arguments.
+# Outputs:
+#   The label on stdout, then the command's own output.
+# Returns:
+#   The command's exit status (non-zero aborts the hook under `set -e`).
+#######################################
+step() {
+  local label
+  label="$1"
+  shift
+  echo "[pre-commit] ${label}..."
+  "$@"
+}
+
+main() {
+  step "ruff check" uv run ruff check .
+  step "black --check" uv run black --check --quiet .
+  step "mypy" uv run mypy
+  step "pytest" uv run pytest -q --cov --cov-report=term-missing:skip-covered
+  echo "[pre-commit] OK."
+}
+
+main "$@"
