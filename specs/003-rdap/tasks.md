@@ -1,6 +1,6 @@
 ---
 feature: Domain expiry over RDAP — the IANA bootstrap, the expiration event, bounded HTTPS requests, and the offline RDAP server
-status: approved
+status: in progress
 date: 2026-11-27
 related:
   - 003-rdap/requirements.md
@@ -21,21 +21,25 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 0 — Offline HTTP test harness
 
-- [ ] `tests/http_server.py`: `LocalHTTPServer` context manager over
+- [x] `tests/http_server.py`: `LocalHTTPServer` context manager over
   `http.server.ThreadingHTTPServer`, bound to `127.0.0.1:0`, with the TLS handshake in the request
   thread; `Route` with a fixed answer, `redirect`, `silent`, `drip` and `endless`; each request
   recorded (path and headers); the threads' exceptions recorded, not raised; stop and join on exit.
   — RF-08, ADR-7
-- [ ] `tests/conftest.py`: the `https_server` fixture, a `LocalHTTPServer` with a leaf for
+- [x] `tests/conftest.py`: the `https_server` fixture, a `LocalHTTPServer` with a leaf for
   `127.0.0.1` issued by the `ca` fixture. — RF-08, ADR-7
-- [ ] `tests/test_http_server.py`: with `client_context` and `http.client`, a fixed route answers
+- [x] `tests/test_http_server.py`: with `client_context` and `http.client`, a fixed route answers
   its status, headers and body; a redirect route answers its `Location`; an unknown path is `404`;
   the requests are recorded; a client that does not trust the leaf fails the handshake and the
   server keeps answering the next client. — RF-08. This file is not in the design's layout; it is
-  recorded as a deviation.
-- [ ] See the harness tests fail once: record no request, and answer `200` for an unknown path;
-  each goes red, then the change is undone. — RF-08
-- [ ] Quality gate. — <result>
+  recorded as a deviation (deviation 1), and so are the tests of the other routes (deviation 3).
+- [x] See the harness tests fail once: record no request, and answer `200` for an unknown path;
+  each goes red, then the change is undone. — RF-08. Also sabotaged, each red on its own test: the
+  `Content-Length` of the route ignored, the redirect sent without `Location`, the routes read
+  from a copy taken at start, the thread errors dropped, `silent` answering at once, `drip`
+  sending three bytes per write, `endless` sending one chunk, the `Content-Type` of `drip` and
+  `endless` dropped, the `Connection: close` header dropped.
+- [x] Quality gate. — 111 passed (10 new) in 7.7 s; ruff/black/mypy green; `src` at 100%
 
 ## Stage 1 — Types, validation, bootstrap, answer and classification
 

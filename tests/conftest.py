@@ -1,11 +1,13 @@
 """
-Shared fixtures of the test suite: the network guard, the test CA and the local TLS server.
+Shared fixtures of the test suite: the network guard, the test CA and the local test servers.
 
 No test reaches a real network (``specs/README.md``, "How a spec is tested"): the autouse
 ``network_guard`` installs :mod:`network_guard` for every test. The certificates are made during
 the test with ``trustme`` (spec 002, ADR-4), ``serve`` starts a :class:`~tls_server.LocalServer`
 on ``127.0.0.1`` for one of them, and ``client_context`` is the context of the check with the test
-CA added as a trust anchor.
+CA added as a trust anchor. ``https_server`` is a :class:`~http_server.LocalHTTPServer` on
+``127.0.0.1`` with a leaf from the same CA, the registry and bootstrap host of the RDAP tests
+(spec 003, ADR-7).
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import pytest
 import trustme
 
 from certs import PemLeaf
+from http_server import LocalHTTPServer
 from network_guard import NetworkGuard, install
 from tls_server import LocalServer
 from tlsvigil.certificate import create_context
@@ -151,3 +154,44 @@ def serve(tmp_path: Path) -> Iterator[Callable[..., LocalServer]]:
             return stack.enter_context(LocalServer("tls", context))
 
         yield start
+
+
+# ---------------------------------------------------------------------------
+# Local HTTPS server
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def https_context(ca: trustme.CA) -> ssl.SSLContext:
+    """
+    Build a server context that presents a leaf for ``127.0.0.1``.
+
+    Args:
+        ca (trustme.CA): Issues the leaf, so ``client_context`` trusts it and a context without
+            the test CA does not.
+
+    Returns:
+        ssl.SSLContext: The context of ``https_server``; a test that needs a second server, or
+            to stop one before it ends, starts a :class:`~http_server.LocalHTTPServer` with it.
+    """
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    # Written out so static analysis sees no TLS 1.0 or 1.1 (CodeQL `py/insecure-protocol`).
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    ca.issue_cert("127.0.0.1").configure_cert(context)
+    return context
+
+
+@pytest.fixture
+def https_server(https_context: ssl.SSLContext) -> Iterator[LocalHTTPServer]:
+    """
+    Start a local HTTPS server with no routes yet, and stop it when the test ends.
+
+    Args:
+        https_context (ssl.SSLContext): The server context, with the leaf for ``127.0.0.1``.
+
+    Yields:
+        LocalHTTPServer: The running server; the test adds its routes, and builds the URLs it
+            needs from ``url(path)`` once the port is known.
+    """
+    with LocalHTTPServer(https_context) as server:
+        yield server

@@ -1,6 +1,6 @@
 ---
 feature: Domain expiry over RDAP — the IANA bootstrap, the expiration event, bounded HTTPS requests, and the offline RDAP server
-status: approved
+status: in progress
 date: 2026-11-27
 related:
   - 001-foundation/design.md
