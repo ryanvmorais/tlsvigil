@@ -1,6 +1,6 @@
 ---
 feature: Foundation — package skeleton, local quality gate, CI, supply-chain hygiene and documentation guards
-status: in progress
+status: done
 date: 2026-11-27
 related:
   - 001-foundation/requirements.md
@@ -96,7 +96,10 @@ closes the gaps the design found, and Stage 3 is the acceptance on GitHub.
   branch with `packaging>=24` failed `Package` with that message after `Requires-Dist: packaging>=24`;
   the `Quality` jobs failed earlier, at `uv sync --locked`, because the lock was left as it was. The
   branch was deleted.
-- [ ] On GitHub, the issue chooser shows the two forms and the private vulnerability link, and no
-  blank issue. — RF-09
+- [x] On GitHub, the issue chooser shows the two forms and the private vulnerability link, and no
+  blank issue. — RF-09. Checked on 2026-11-27 after PR #2 was merged: the chooser lists Bug report,
+  Feature request and the private vulnerability entry; the blank issue shows only to maintainers.
+  GitHub added its own "Report a security vulnerability" entry beside the contact link of
+  `config.yml`, both to the same place, so the contact link was removed (design, Deviations 1).
 - [x] Quality gate: the CI of the pull request, with the run recorded here. — green: CI run
   46070547105 on PR #2, 15 of 15 checks
