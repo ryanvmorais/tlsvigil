@@ -1,6 +1,6 @@
 ---
 feature: Domain expiry over RDAP — the IANA bootstrap, the expiration event, bounded HTTPS requests, and the offline RDAP server
-status: approved
+status: in progress
 date: 2026-11-27
 related:
   - 003-rdap/requirements.md
@@ -449,3 +449,30 @@ domain object, and the `.br` and `.com` answers carry it.
   sabotage and its red run go into the tasks and the pull request.
 - **Coverage:** `src/tlsvigil/rdap.py` at 100% lines and branches; a branch only one platform
   reaches is marked and explained in the code.
+
+## Deviations
+
+1. **RF-08: the harness has its own tests.** `tests/test_http_server.py` is not in the module
+   layout. It drives `LocalHTTPServer` with `http.client` and `client_context`, so a fault of the
+   harness fails there, apart from the RDAP tests that rely on it.
+2. **RF-08, ADR-7: the server context is a fixture of its own.** `https_context` builds the
+   server context with the leaf for `127.0.0.1`, and `https_server` starts a server with it. A
+   test that must read the errors after the request threads are joined, or that needs a second
+   server (the redirect to another port), starts a `LocalHTTPServer` with `https_context`.
+3. **RF-08: the routes have a few more rules.** A `Content-Length` given in the headers of a route
+   replaces the real one, so a test can announce a body larger than the server sends; every answer
+   carries `Connection: close`, one request per connection; `drip` and `endless` send
+   `Content-Type: application/rdap+json`. The server also records the method of each request and
+   offers `url(path)` and `RecordedRequest.header(name)`. Each rule has a test in
+   `tests/test_http_server.py`, as do `silent`, `drip` and `endless`.
+
+## Implementation notes
+
+- **Stage 0:** `LocalHTTPServer` is `http.server.ThreadingHTTPServer` with `daemon_threads` off,
+  so closing the server joins every request thread; the routes that wait (`silent`, `drip`) and
+  the one that never ends (`endless`) return when the server stops, and every socket call of a
+  request thread is capped at 5 s. The bind skips the reverse lookup `HTTPServer.server_bind`
+  makes of the host. A rejected handshake is recorded as an `SSLError`, or on Windows sometimes as
+  a `ConnectionResetError`, when the client's close arrives before its alert; the test accepts
+  either as an `OSError`. The ten harness tests run in about 1.5 s and passed twenty runs in a
+  row on Windows and Python 3.15.
