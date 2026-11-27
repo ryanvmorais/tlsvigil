@@ -57,25 +57,33 @@ password) come from the CI's secret store, never from a file in the repository. 
 ## Architecture
 
 ```text
-src/tlsvigil/    # the package: cli.py (argparse entry point), __main__.py (python -m tlsvigil)
-tests/           # pytest; the CLI is driven through main(argv), and the docs have tests too
-specs/           # spec-driven development: requirements → design → tasks per feature
-docs/            # stack.md: each technology and why it was chosen
-.githooks/       # versioned pre-commit hook (core.hooksPath)
-.claude/         # Claude Code hooks: format on edit, validate at turn end, guard uv.lock
-.github/         # CI, CodeQL, dependency review, weekly pip-audit, Dependabot, templates
-uv.lock          # never edit by hand (generated; a hook blocks it)
+src/tlsvigil/       # the package: cli.py (argparse entry point), __main__.py (python -m tlsvigil),
+                    #   certificate.py (the verified TLS check, its result type and classify())
+tests/              # pytest; the CLI is driven through main(argv), and the docs have tests too
+  conftest.py       # installs the network guard (autouse) and the CA and local-server fixtures
+  network_guard.py  # resolve and connect on loopback only; anything else fails the test
+  tls_server.py     # LocalServer: a TLS, silent or plain-text server on 127.0.0.1 and ::1
+  certs.py          # the test certificates trustme does not make (self-signed, no AKI)
+specs/              # spec-driven development: requirements → design → tasks per feature
+docs/               # stack.md: each technology and why it was chosen
+.githooks/          # versioned pre-commit hook (core.hooksPath)
+.claude/            # Claude Code hooks: format on edit, validate at turn end, guard uv.lock
+.github/            # CI, CodeQL, dependency review, weekly pip-audit, Dependabot, templates
+uv.lock             # never edit by hand (generated; a hook blocks it)
 ```
 
-The specs to come add the modules in this order: the certificate check (002), the RDAP lookup
-(003), the configuration, the output, `--json`, `--lang` and the exit codes (004), the
-notifications without duplicates (005), and the composite Action in `action.yml` (006).
+The certificate check (spec 002) is a library function; no command calls it. The specs to
+come add, in this order: the RDAP lookup (003), the configuration, the output, `--json`, `--lang`
+and the exit codes (004), the notifications without duplicates (005), and the composite Action in
+`action.yml` (006).
 
 ### Before you touch…
 
 | You are changing | Read first |
 |---|---|
 | `pyproject.toml` (`dependencies`, the README rewrite for PyPI) | spec `001` (ADR-1 and the packaging decisions) |
+| `src/tlsvigil/certificate.py` | spec `002` (ADR-2 on the explicit context, ADR-3 on the reasons) |
+| `tests/conftest.py`, `tests/network_guard.py`, `tests/tls_server.py` | spec `002` (ADR-4, ADR-5 and deviation 7 on `::1`) |
 | `README.md` or `README.pt-BR.md` | the two READMEs rule below and `tests/test_readme_pt_br.py` |
 | `.github/workflows/` | the comments at the top of each workflow; the ruleset requires the `Quality` checks by name |
 
@@ -93,6 +101,9 @@ notifications without duplicates (005), and the composite Action in `action.yml`
 - ⚠️ **External text is data**: what comes from a certificate, an RDAP answer or the configuration
   reaches an issue or a notification as plain text, never as markup, a link or a mention.
 - ⚠️ **Tests never reach the network**: a local server on `127.0.0.1` or a recorded answer.
+  The autouse guard in `tests/network_guard.py` fails any other lookup or connection.
+- ⚠️ **Every `ssl.SSLContext` sets `minimum_version` explicitly**, in the tests too (CodeQL
+  `py/insecure-protocol`); the TLS 1.1 test triggers that alert on purpose.
 
 ## Conventions
 

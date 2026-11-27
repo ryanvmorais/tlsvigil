@@ -1,6 +1,6 @@
 ---
 feature: Certificate check — verified TLS handshake to host:port, days left, a failed verification as a finding, and the offline test server
-status: in progress
+status: done
 date: 2026-11-27
 related:
   - 002-certificate/requirements.md
@@ -389,3 +389,15 @@ runner reports as `untrusted` can verify on a Windows machine that has the inter
    now binds `::1` on the same port when the machine has IPv6, accepting on both through
    `selectors`; when that bind fails, the tests still pass, only slower. `host` stays
    `127.0.0.1`, and the counter counts the connections of both addresses.
+
+## Implementation notes
+
+- **Suite:** 101 tests, 86 of them new in this spec (63 for the check, 13 for the
+  classification, 10 for the network guard), with no test skipped on Windows and Python 3.15.2:
+  the TLS 1.1 positive control completes its handshake there. `src/tlsvigil` stays at 100% of
+  lines and branches, with no branch excluded.
+- **Time:** the suite runs in 5.9 s and the full local gate (ruff, black, mypy, pytest) in 8.2 s,
+  on Windows and Python 3.15.2. The listener on `::1` (deviation 7) is what keeps the suite under
+  ten seconds there.
+- **No command calls the check:** `tlsvigil --version` is still the only command that
+  runs; spec `004` connects `check_certificate` and `classify` to the configuration and the output.

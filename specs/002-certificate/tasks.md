@@ -1,6 +1,6 @@
 ---
 feature: Certificate check — verified TLS handshake to host:port, days left, a failed verification as a finding, and the offline test server
-status: in progress
+status: done
 date: 2026-11-27
 related:
   - 002-certificate/requirements.md
@@ -139,14 +139,16 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 3 — Documentation and closing
 
-- [ ] `docs/stack.md`: `trustme` and `cryptography`, dev only, with why they were chosen. — ADR-4
-- [ ] `CLAUDE.md`: "Architecture" names `certificate.py` and the test harness (`conftest.py`
+- [x] `docs/stack.md`: `trustme` and `cryptography`, dev only, with why they were chosen. — ADR-4
+- [x] `CLAUDE.md`: "Architecture" names `certificate.py` and the test harness (`conftest.py`
   guard, `tls_server.py`, `certs.py`). — RF-07
-- [ ] `README.md` and `README.pt-BR.md`: two limits in "Scope and limitations", in step (a
+- [x] `README.md` and `README.pt-BR.md`: two limits in "Scope and limitations", in step (a
   revoked certificate is not detected; a port that starts in plain text and upgrades with STARTTLS
   is not checked). — RF-08 of spec `001`
-- [ ] `specs/README.md`: the `002-certificate` row with delivery `v0.2` and status `done`.
-- [ ] Traceability: every RF, RNF and ADR cited here exists, every RF is cited by a task, and the
+- [x] `specs/README.md`: the `002-certificate` row with delivery `v0.2` and status `done`.
+- [x] Traceability: every RF, RNF and ADR cited here exists, every RF is cited by a task, and the
   `status` is the same in the three files and the roadmap.
-- [ ] `status: done` in the three files; deviations and measurements in the design.
-- [ ] Quality gate.
+- [x] `status: done` in the three files; deviations and measurements in the design.
+- [x] Quality gate. — green on Python 3.15.2 on 2026-11-27: ruff and black clean, mypy no issues
+  in 19 files, 101 passed in 5.4 s, 100% coverage of `src/tlsvigil`; the full local gate takes
+  8.2 s.
