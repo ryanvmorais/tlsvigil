@@ -1,8 +1,5 @@
 # Issue form configuration — consumed by GitHub.
-# No blank issues: the two forms cover bugs and features. Vulnerabilities go private, through the
-# link below (Private Vulnerability Reporting is on).
+# No blank issues: the two forms cover bugs and features. Vulnerabilities go private: with private
+# vulnerability reporting on and a SECURITY.md, GitHub adds the "Report a security vulnerability"
+# entry to the chooser by itself, so no contact link repeats it here.
 blank_issues_enabled: false
-contact_links:
-  - name: "Report a vulnerability in TLSVigil"
-    url: "https://github.com/ryanvmorais/tlsvigil/security/advisories/new"
-    about: "Private reporting through GitHub Security Advisories. See SECURITY.md."

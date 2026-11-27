@@ -1,6 +1,6 @@
 ---
 feature: Foundation — package skeleton, local quality gate, CI, supply-chain hygiene and documentation guards
-status: in progress
+status: done
 date: 2026-11-27
 related:
   - 001-foundation/requirements.md
@@ -326,6 +326,13 @@ No public interface changes; nothing needs migration.
   request, the hooks fed JSON on stdin), and the sdist by listing the archive after `uv build`.
 - **No network:** none of these tests opens a socket; the guard that enforces it for every later
   test is spec `002`.
+
+## Deviations
+
+1. **RF-09: the vulnerability entry of the issue chooser is GitHub's own.** With private
+   vulnerability reporting on and a `SECURITY.md`, GitHub adds "Report a security vulnerability"
+   to the chooser by itself, and the `contact_links` entry of `config.yml` repeated it with the same
+   destination. The entry was removed; `config.yml` keeps `blank_issues_enabled: false` only.
 
 ## Implementation notes
 

@@ -1,6 +1,6 @@
 ---
 feature: Foundation — package skeleton, local quality gate, CI, supply-chain hygiene and documentation guards
-status: in progress
+status: done
 date: 2026-11-27
 related: []
 origin: conception
