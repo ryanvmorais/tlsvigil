@@ -1,0 +1,57 @@
+# Bug report form — consumed by GitHub when opening a new issue.
+# The PR that fixes it closes the issue with "Closes #N".
+name: "Bug report"
+description: "Something in TLSVigil does not work as it should"
+labels:
+  - "bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A vulnerability in TLSVigil itself (for example a token that reaches
+        an issue or a log, or a crafted response that makes it connect somewhere else) is **not** a
+        public issue: report it privately through GitHub's private vulnerability reporting on the
+        Security tab. A wrong date, a missed warning or a warning that should not be there is a
+        normal bug.
+
+        **Never paste a token or a password.** If the host or the domain is not one you want public,
+        say which top-level domain and which certificate authority it uses instead.
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: "What happens"
+      description: "The wrong behaviour you observed."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "What should happen"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: "How to reproduce"
+      description: "The exact command or workflow, and the part of the configuration that matters."
+      placeholder: |
+        1. Run `tlsvigil ...`
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: "Environment"
+      description: "Optional. TLSVigil version (`tlsvigil --version`), Python version, OS, or the runner of the workflow."
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Output or logs"
+      description: "Optional. Remove tokens, passwords and any host you do not want public."
+      render: shell
