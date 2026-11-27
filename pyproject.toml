@@ -71,6 +71,10 @@ dev = [
     # Test runner and coverage.
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
+    # Test certificates made at run time (spec 002, ADR-4): trustme for the CA,
+    # intermediates and leaves; cryptography for the cases trustme has no option for.
+    "trustme>=1.2.1",
+    "cryptography>=50.0.2",
 ]
 
 # --- Packaging (Hatchling) ---------------------------------------------------
