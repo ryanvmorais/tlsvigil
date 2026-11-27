@@ -359,3 +359,14 @@ runner reports as `untrusted` can verify on a Windows machine that has the inter
    the autouse `network_guard` fixture. The tests import `NetworkAccessError` from that module,
    because importing `conftest.py` directly is unsupported by pytest. The guard also records
    every lookup, not only every connect, so a test can assert that nothing was resolved.
+2. **RF-06: the timeout must also be finite.** `float("inf")` and `nan` are refused with the
+   other bad timeouts: `nan` already fails `> 0`, and `socket.settimeout(inf)` raises
+   `OverflowError`, which is not an `OSError` and would escape the check instead of becoming a
+   result. The type rules use `type(x) is int` (and `str`, `float`) rather than `isinstance`, which
+   refuses a `bool` in one test and keeps `mypy --strict` free of redundant expressions; an aware
+   `now` is one whose `utcoffset()` is not `None`.
+3. **RF-02, ADR-1: `classify` checks more than the threshold.** It refuses a `float` or `bool`
+   threshold as well as a negative one, checks the threshold before the outcome (so a bad
+   configuration fails on every host, not only on the verified ones), and refuses a verified
+   result without days left with `ValueError`. The check never builds such a result; the guard
+   is for one built by hand.

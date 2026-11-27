@@ -51,23 +51,36 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 1 — Result type, validation, context and classification
 
-- [ ] `src/tlsvigil/certificate.py`: the module docstring, the four `StrEnum`s and the frozen
+- [x] `src/tlsvigil/certificate.py`: the module docstring, the four `StrEnum`s and the frozen
   `CertificateResult`, as in the design's data model. — RF-01, RF-03, RF-04, ADR-1
-- [ ] `src/tlsvigil/certificate.py`: `_validate(host, port, timeout, now)` with the rules of the
-  design's "Input validation". — RF-06
-- [ ] `src/tlsvigil/certificate.py`: `create_context()` with the three explicit settings of the
+- [x] `src/tlsvigil/certificate.py`: `_validate(host, port, timeout, now)` with the rules of the
+  design's "Input validation". — RF-06. The timeout must also be finite (design, deviation 2);
+  its tests come with the check in Stage 2.
+- [x] `src/tlsvigil/certificate.py`: `create_context()` with the three explicit settings of the
   design's table. — RF-05, RNF-02, ADR-2, ADR-7
-- [ ] `src/tlsvigil/certificate.py`: `classify(result, warn_days)`. — RF-02, ADR-1
-- [ ] `tests/test_classify.py`: `days_left` `N - 1` → `expiring`, `N` and `N + 1` → `ok`; threshold
+- [x] `src/tlsvigil/certificate.py`: `classify(result, warn_days)`. — RF-02, ADR-1. It also
+  refuses a verified result without days left (design, deviation 3).
+- [x] `tests/test_classify.py`: `days_left` `N - 1` → `expiring`, `N` and `N + 1` → `ok`; threshold
   `0` → `ok` with `days_left` `0`; a negative threshold → `ValueError`; `invalid` and `error`
-  outcomes → their status with thresholds `0` and `365`. — RF-02, RF-08
-- [ ] `tests/test_certificate.py`: `create_context()` has the TLS 1.2 minimum, neither
+  outcomes → their status with thresholds `0` and `365`. — RF-02, RF-08. Also a `float` and a
+  `bool` threshold, a bad threshold on an `invalid` result, and a verified result without days
+  left (13 tests).
+- [x] `tests/test_certificate.py`: `create_context()` has the TLS 1.2 minimum, neither
   `VERIFY_X509_STRICT` nor `VERIFY_X509_PARTIAL_CHAIN`, `hostname_checks_common_name` off,
-  `CERT_REQUIRED` and `check_hostname` on. — RF-05, RNF-02, ADR-2
-- [ ] See the new tests fail once: change `<` to `<=` in `classify`, drop the negative-threshold
+  `CERT_REQUIRED` and `check_hostname` on. — RF-05, RNF-02, ADR-2. A positive control checks
+  that `VERIFY_X509_TRUSTED_FIRST` survives the two cleared flags (5 tests).
+- [x] See the new tests fail once: change `<` to `<=` in `classify`, drop the negative-threshold
   check, leave `VERIFY_X509_STRICT` on, set the minimum to TLS 1.1; each goes red, then the change
-  is undone. — RF-02, RNF-02
-- [ ] Quality gate.
+  is undone. — RF-02, RNF-02. Done on 2026-11-27 on Python 3.15.2: `<=` turned the
+  exactly-the-threshold and the threshold-of-zero tests red; without the negative check, the two
+  negative-threshold tests; `VERIFY_X509_STRICT` left on, the 3.12-verification test; TLS 1.1 as
+  the minimum, the five context tests (the `DeprecationWarning` is an error under
+  `filterwarnings`), and the minimum-version assertion alone with that warning ignored. Three more:
+  accepting any number turned the `float` and `bool` cases red, removing the `days_left` guard its
+  test, and leaving `hostname_checks_common_name` on its test.
+- [x] Quality gate. — green on Python 3.15.2 on 2026-11-27: ruff and black clean, mypy no issues
+  in 19 files, 43 passed; `certificate.py` at 69%, the missing lines being the body of
+  `_validate`, whose tests are in Stage 2
 
 ## Stage 2 — The check against the local server
 
