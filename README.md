@@ -96,6 +96,14 @@ TLSVigil is deliberately small. For each limit below, what to reach for instead.
 - **Some registries leave the date out.** RDAP does not require the `expiration` event, and a
   record without it gets no domain warning; the result says the date is unknown. *Instead:* the
   same as above.
+- **A revoked certificate is not detected.** The check verifies the chain and the name and reads
+  the expiry date, but does not ask the certificate authority (OCSP or CRL) whether the
+  certificate was revoked before that date. *Instead:* a monitor that checks revocation, or the
+  account page of your certificate authority.
+- **A port that starts in plain text is not checked.** The check speaks TLS from the first byte,
+  as on ports 443, 465 or 993; a server that starts in plain text and upgrades with STARTTLS (SMTP
+  on 25 or 587, IMAP on 143, XMPP) ends as a TLS error. *Instead:* point it at the implicit-TLS
+  port of the same server when it has one (465 for SMTP, 993 for IMAP).
 - **It sees what the internet sees.** The check runs from a GitHub-hosted runner, so a host that
   is reachable only inside your network is not covered. *Instead:* run the command line on a
   machine inside that network, from `cron` or a scheduled task.

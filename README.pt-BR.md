@@ -98,6 +98,14 @@ O TLSVigil é pequeno de propósito. Para cada limite abaixo, o que usar no luga
 - **Alguns registros deixam a data de fora.** O RDAP não exige o evento `expiration`, e um
   registro sem ele não gera aviso de domínio; o resultado diz que a data é desconhecida. *No
   lugar:* o mesmo do item acima.
+- **Um certificado revogado não é detectado.** A verificação confere a cadeia e o nome e lê a data
+  de vencimento, mas não pergunta à autoridade certificadora (OCSP ou CRL) se o certificado foi
+  revogado antes dessa data. *No lugar:* um monitor que confira revogação, ou a página da sua conta
+  na autoridade certificadora.
+- **Uma porta que começa em texto puro não é conferida.** A verificação fala TLS desde o primeiro
+  byte, como nas portas 443, 465 ou 993; um servidor que começa em texto puro e passa para TLS com
+  STARTTLS (SMTP na 25 ou na 587, IMAP na 143, XMPP) termina como erro de TLS. *No lugar:* aponte
+  para a porta de TLS implícito do mesmo servidor, quando houver (465 para SMTP, 993 para IMAP).
 - **Ele vê o que a internet vê.** A verificação roda num runner hospedado pelo GitHub, então um
   host que só se alcança de dentro da sua rede fica de fora. *No lugar:* rode a linha de comando
   numa máquina dentro dessa rede, pelo `cron` ou por uma tarefa agendada.

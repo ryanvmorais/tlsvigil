@@ -6,10 +6,10 @@ and the handful of concepts worth learning first if it is new to you.
 This is not exhaustive: the full version graph is pinned in `uv.lock`, and per-feature decisions
 live in the `### ADR-N` blocks of `specs/*/design.md`. This page is the map: the *shape* of the
 project and the reasoning behind each piece. The project is not released yet (`1.0.0.dev0`): today
-the package is the skeleton, the quality gate and the CI, and `tlsvigil --version` is the only
-command that runs. The pieces marked **planned** below are specified for the next specs (the
-certificate check, the RDAP lookup, the configuration and output, the notifications and the
-composite Action) and are not code yet.
+the package is the skeleton, the quality gate, the CI and the certificate check (a library
+function that no command calls), and `tlsvigil --version` is the only command that runs. The
+pieces marked **planned** below are specified for the next specs (the RDAP lookup, the
+configuration and output, the notifications and the composite Action) and are not code yet.
 
 The project is one small program with no runtime dependency:
 
@@ -20,7 +20,7 @@ GitHub Actions schedule (cron)  ──►  tlsvigil  (CLI, argparse)            
         ▼                               ▼                             ▼
  configuration (TOML)           certificate check              domain check
  tomllib            planned     socket + ssl, verified         IANA bootstrap ──► RDAP server
-                                TLS handshake      planned     HTTPS, bounded     planned
+                                TLS handshake        built     HTTPS, bounded     planned
         │                               │                             │
         └───────────────────────────────┴──────────────┬──────────────┘
                                                        ▼
@@ -107,10 +107,14 @@ image would add a release surface for no gain.
 
 ### `socket` and `ssl`
 
-**Planned.** The certificate check opens a TCP connection to `host:port`, upgrades it to TLS with a
-default `ssl.SSLContext` (certificate and host name verified, against the system trust store) and
-reads the `notAfter` date of the certificate the server presents. A handshake that fails
-verification (expired, wrong name, untrusted chain) is itself the finding.
+The certificate check (`certificate.py`) opens one TCP connection to `host:port`, upgrades it to
+TLS with a context built by `create_context()` (certificate and host name verified, against the
+system trust store) and reads the `notAfter` date of the certificate the server presents. A
+handshake that fails verification (expired, wrong name, untrusted chain) is itself the finding,
+with its reason taken from the OpenSSL verification code. The context starts from the defaults and
+pins three settings (TLS 1.2 or newer, no `VERIFY_X509_STRICT` or `VERIFY_X509_PARTIAL_CHAIN`, the
+host matched against the subject alternative names only), because Python 3.13 changed the
+defaults and the verdict must be the same on every supported version.
 
 **Why this:** against `pyOpenSSL`, `cryptography` or shelling out to `openssl s_client`, the `ssl`
 module needs no dependency, is already linked to the platform's OpenSSL, and verifies by default.
@@ -119,7 +123,8 @@ from a certificate it just rejected.
 
 **Learn:** `ssl.create_default_context()`, `SSLContext.wrap_socket(server_hostname=...)`,
 `SSLCertVerificationError` and its `verify_code`, `getpeercert()` and the `notAfter` string (parsed
-with `ssl.cert_time_to_seconds`), and why SNI (`server_hostname`) is required.
+with `ssl.cert_time_to_seconds`), why SNI (`server_hostname`) is required, and the `verify_flags`
+that Python 3.13 added to the defaults.
 
 **Docs:** [`ssl`](https://docs.python.org/3.12/library/ssl.html) ·
 [`socket`](https://docs.python.org/3.12/library/socket.html)
@@ -315,6 +320,29 @@ cases of a parser or a date rule cheap to write.
 **Docs:** [docs.pytest.org](https://docs.pytest.org/) ·
 [pytest-cov](https://pytest-cov.readthedocs.io/)
 
+### trustme and cryptography (dev only)
+
+The test certificates. `trustme` makes, during the test run, a certificate authority, an
+intermediate and leaves with chosen names and dates; `cryptography`, already its dependency, makes
+the two certificates `trustme` has no option for (a self-signed leaf and a leaf without an
+Authority Key Identifier, in `tests/certs.py`). A threaded server in `tests/tls_server.py` serves
+them on `127.0.0.1` and `::1`, and an autouse guard (`tests/network_guard.py`) fails any lookup or
+connection that leaves the loopback interface. Both packages are in the dev group only: the wheel
+still declares no dependency.
+
+**Why this:** against certificates committed to the repository, a certificate made at run time can
+expire in exactly ten days on every run; a committed one has a fixed date and turns into an
+expired one some day. Against the `openssl` command line, it is the same code on the Linux and
+Windows runners. Against `pytest-socket` for the guard, the rule is narrow enough for a few dozen
+lines of the standard library that the suite tests itself.
+
+**Learn:** `trustme.CA()`, `issue_cert(...)` with `not_before` and `not_after`,
+`configure_trust(context)`, `cryptography.x509.CertificateBuilder`, and how `monkeypatch` wraps
+`socket.getaddrinfo` and `socket.socket.connect`.
+
+**Docs:** [trustme](https://trustme.readthedocs.io/) ·
+[cryptography](https://cryptography.io/)
+
 ---
 
 ## CI and supply chain
@@ -380,7 +408,7 @@ broken on its first day does not reach the lock.
 ## What is deliberately not in the stack
 
 - **requests, httpx** — nicer HTTP clients, but each is a dependency; two `GET`s and a `POST` do not need one.
-- **cryptography, pyOpenSSL** — would parse a certificate in detail; the `ssl` module already returns the date and verifies the chain.
+- **cryptography, pyOpenSSL at run time** — would parse a certificate in detail; the `ssl` module already returns the date and verifies the chain. `cryptography` is in the dev group only, to make test certificates.
 - **click, typer, rich** — nice command lines, but each is a dependency; `argparse` does the job.
 - **PyYAML, pydantic** — a YAML configuration needs a dependency and a safe loader; TOML with `tomllib` and a hand-written check is enough for a small, fixed shape.
 - **A WHOIS client** — WHOIS has no standard format; RDAP is JSON and standardised.

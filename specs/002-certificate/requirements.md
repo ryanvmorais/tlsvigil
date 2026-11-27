@@ -1,6 +1,6 @@
 ---
 feature: Certificate check — verified TLS handshake to host:port, days left, a failed verification as a finding, and the offline test server
-status: in progress
+status: done
 date: 2026-11-27
 related:
   - 001-foundation/design.md
