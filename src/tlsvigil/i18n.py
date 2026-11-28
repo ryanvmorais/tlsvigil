@@ -125,6 +125,187 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
         Lang.EN: "the domain must not end in a numeric label (an IP address is not a domain)",
         Lang.PT_BR: "o domínio não pode terminar num rótulo numérico (endereço IP não é domínio)",
     },
+    # The status column of the text output (RF-06): each label differs, so an attention line is
+    # told apart without colour.
+    "status.ok": {
+        Lang.EN: "OK",
+        Lang.PT_BR: "OK",
+    },
+    "status.expiring": {
+        Lang.EN: "EXPIRING",
+        Lang.PT_BR: "VENCENDO",
+    },
+    "status.invalid": {
+        Lang.EN: "INVALID",
+        Lang.PT_BR: "INVÁLIDO",
+    },
+    "status.unknown": {
+        Lang.EN: "UNKNOWN",
+        Lang.PT_BR: "DESCONHECIDO",
+    },
+    "status.error": {
+        Lang.EN: "ERROR",
+        Lang.PT_BR: "ERRO",
+    },
+    # The detail of a certificate line (RF-06); {days} is a `days` count, {date} the UTC date.
+    "line.certificate.expires": {
+        Lang.EN: "certificate expires in {days} ({date})",
+        Lang.PT_BR: "certificado vence em {days} ({date})",
+    },
+    "line.certificate.today": {
+        Lang.EN: "certificate expires today ({date})",
+        Lang.PT_BR: "certificado vence hoje ({date})",
+    },
+    "line.certificate.invalid": {
+        Lang.EN: "certificate failed verification: {reason}",
+        Lang.PT_BR: "certificado não passou na verificação: {reason}",
+    },
+    "line.certificate.error": {
+        Lang.EN: "certificate not checked: {kind}",
+        Lang.PT_BR: "certificado não verificado: {kind}",
+    },
+    # The detail of a domain line (RF-06); a passed date is given as a positive count of days.
+    "line.domain.expires": {
+        Lang.EN: "domain expires in {days} ({date})",
+        Lang.PT_BR: "domínio vence em {days} ({date})",
+    },
+    "line.domain.today": {
+        Lang.EN: "domain expires today ({date})",
+        Lang.PT_BR: "domínio vence hoje ({date})",
+    },
+    "line.domain.expired": {
+        Lang.EN: "domain expired {days} ago ({date})",
+        Lang.PT_BR: "domínio venceu há {days} ({date})",
+    },
+    "line.domain.unknown": {
+        Lang.EN: "domain expiry unknown: {reason}",
+        Lang.PT_BR: "vencimento do domínio desconhecido: {reason}",
+    },
+    "line.domain.error": {
+        Lang.EN: "domain not checked: {kind}",
+        Lang.PT_BR: "domínio não verificado: {kind}",
+    },
+    # The last line of the text output (RF-06): "6 checked: 3 need attention."
+    "summary": {
+        Lang.EN: "{checked}: {attention}.",
+        Lang.PT_BR: "{checked}: {attention}.",
+    },
+    "checked.one": {
+        Lang.EN: "{count} checked",
+        Lang.PT_BR: "{count} verificado",
+    },
+    "checked.other": {
+        Lang.EN: "{count} checked",
+        Lang.PT_BR: "{count} verificados",
+    },
+    "attention.one": {
+        Lang.EN: "{count} needs attention",
+        Lang.PT_BR: "{count} precisa de atenção",
+    },
+    "attention.other": {
+        Lang.EN: "{count} need attention",
+        Lang.PT_BR: "{count} precisam de atenção",
+    },
+    # Why a verification failed (spec 002, RF-03; InvalidReason).
+    "reason.certificate.expired": {
+        Lang.EN: "expired",
+        Lang.PT_BR: "vencido",
+    },
+    "reason.certificate.not_yet_valid": {
+        Lang.EN: "not valid yet",
+        Lang.PT_BR: "ainda não é válido",
+    },
+    "reason.certificate.hostname_mismatch": {
+        Lang.EN: "the certificate is not for this host",
+        Lang.PT_BR: "o certificado não é deste host",
+    },
+    "reason.certificate.untrusted": {
+        Lang.EN: "the chain does not lead to a trusted authority",
+        Lang.PT_BR: "a cadeia não leva a uma autoridade confiável",
+    },
+    "reason.certificate.other": {
+        Lang.EN: "another verification failure",
+        Lang.PT_BR: "outra falha na verificação",
+    },
+    # Why a host could not be checked (spec 002, RF-04; certificate.ErrorKind).
+    "error.certificate.dns": {
+        Lang.EN: "the name does not resolve",
+        Lang.PT_BR: "o nome não resolve",
+    },
+    "error.certificate.refused": {
+        Lang.EN: "the connection was refused",
+        Lang.PT_BR: "a conexão foi recusada",
+    },
+    "error.certificate.timeout": {
+        Lang.EN: "no answer within the timeout",
+        Lang.PT_BR: "sem resposta dentro do timeout",
+    },
+    "error.certificate.tls": {
+        Lang.EN: "the TLS handshake failed",
+        Lang.PT_BR: "o handshake TLS falhou",
+    },
+    "error.certificate.other": {
+        Lang.EN: "an unexpected failure",
+        Lang.PT_BR: "uma falha inesperada",
+    },
+    # Why the date of a domain is unknown (spec 003, RF-03; UnknownReason).
+    "reason.domain.no_rdap_service": {
+        Lang.EN: "the registry has no RDAP service",
+        Lang.PT_BR: "o registro não tem serviço RDAP",
+    },
+    "reason.domain.no_expiration": {
+        Lang.EN: "the registry gives no expiry date",
+        Lang.PT_BR: "o registro não informa a data de vencimento",
+    },
+    # Why a domain could not be checked (spec 003, RF-04 to RF-06; rdap.ErrorKind).
+    "error.domain.bootstrap": {
+        Lang.EN: "the IANA list of RDAP servers could not be read",
+        Lang.PT_BR: "a lista de servidores RDAP da IANA não pôde ser lida",
+    },
+    "error.domain.dns": {
+        Lang.EN: "the name of the RDAP server does not resolve",
+        Lang.PT_BR: "o nome do servidor RDAP não resolve",
+    },
+    "error.domain.refused": {
+        Lang.EN: "the RDAP server refused the connection",
+        Lang.PT_BR: "o servidor RDAP recusou a conexão",
+    },
+    "error.domain.timeout": {
+        Lang.EN: "the RDAP server did not answer within the timeout",
+        Lang.PT_BR: "o servidor RDAP não respondeu dentro do timeout",
+    },
+    "error.domain.tls": {
+        Lang.EN: "the TLS connection to the RDAP server failed",
+        Lang.PT_BR: "a conexão TLS com o servidor RDAP falhou",
+    },
+    "error.domain.not_found": {
+        Lang.EN: "the registry has no such domain",
+        Lang.PT_BR: "o registro não tem esse domínio",
+    },
+    "error.domain.rate_limited": {
+        Lang.EN: "the registry is limiting requests; try again later",
+        Lang.PT_BR: "o registro está limitando as consultas; tente de novo mais tarde",
+    },
+    "error.domain.http": {
+        Lang.EN: "the RDAP server answered with an error",
+        Lang.PT_BR: "o servidor RDAP respondeu com erro",
+    },
+    "error.domain.redirect": {
+        Lang.EN: "the RDAP server redirected to another place",
+        Lang.PT_BR: "o servidor RDAP redirecionou para outro lugar",
+    },
+    "error.domain.too_large": {
+        Lang.EN: "the RDAP answer is too large",
+        Lang.PT_BR: "a resposta RDAP é grande demais",
+    },
+    "error.domain.invalid_response": {
+        Lang.EN: "the RDAP answer is not a valid domain record",
+        Lang.PT_BR: "a resposta RDAP não é um registro de domínio válido",
+    },
+    "error.domain.other": {
+        Lang.EN: "an unexpected failure",
+        Lang.PT_BR: "uma falha inesperada",
+    },
     # The configuration file itself (RF-02; the place of these problems is empty).
     "config.missing": {
         Lang.EN: "the file {path} does not exist",

@@ -12,9 +12,11 @@ from string import Formatter
 
 import pytest
 
+from tlsvigil import certificate, rdap
 from tlsvigil.certificate import HostProblem
 from tlsvigil.i18n import MESSAGES, Lang, plural, translate
 from tlsvigil.rdap import DomainProblem
+from tlsvigil.runner import STATUSES
 
 
 def _fields(template: str) -> set[str]:
@@ -63,6 +65,39 @@ def test_every_rule_of_a_check_has_a_sentence(prefix: str, problems: type[StrEnu
 
     assert list(problems)
     assert missing == []
+
+
+@pytest.mark.parametrize(
+    ("prefix", "members"),
+    [
+        ("reason.certificate", certificate.InvalidReason),
+        ("error.certificate", certificate.ErrorKind),
+        ("reason.domain", rdap.UnknownReason),
+        ("error.domain", rdap.ErrorKind),
+    ],
+    ids=["certificate reason", "certificate error", "domain reason", "domain error"],
+)
+def test_every_reason_and_error_kind_has_words(prefix: str, members: type[StrEnum]) -> None:
+    """A new reason or kind of error in spec 002 or 003 without words fails here (RF-08)."""
+    missing = [member.value for member in members if f"{prefix}.{member.value}" not in MESSAGES]
+
+    assert list(members)
+    assert missing == []
+
+
+def test_every_status_has_a_label() -> None:
+    """The text output labels every status of both checks (RF-06)."""
+    values = {status.value for status in [*certificate.Status, *rdap.Status]}
+
+    assert set(STATUSES) == values
+    assert all(f"status.{value}" in MESSAGES for value in STATUSES)
+
+
+def test_every_status_label_differs_from_the_others() -> None:
+    """The label alone tells an attention line apart, without colour (RF-06)."""
+    for lang in Lang:
+        labels = [translate(lang, f"status.{value}") for value in STATUSES]
+        assert len(set(labels)) == len(labels)
 
 
 # ---------------------------------------------------------------------------
