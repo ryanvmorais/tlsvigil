@@ -19,7 +19,14 @@ from tlsvigil import __version__
 from tlsvigil.i18n import Lang, plural, translate
 from tlsvigil.runner import STATUSES, CertificateItem, DomainItem, Report
 
-__all__ = ["NAME_WIDTH_CAP", "SCHEMA_VERSION", "printable", "render_json", "render_text"]
+__all__ = [
+    "NAME_WIDTH_CAP",
+    "SCHEMA_VERSION",
+    "display_name",
+    "printable",
+    "render_json",
+    "render_text",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -87,9 +94,11 @@ def _utc_date(moment: datetime) -> str:
     return moment.astimezone(UTC).date().isoformat()
 
 
-def _host_name(item: CertificateItem) -> str:
+def display_name(item: CertificateItem) -> str:
     """
-    Give the name of a certificate line: ``host:port``, an IPv6 address in brackets.
+    Give the name of a certificate: ``host:port``, an IPv6 address in brackets.
+
+    The lines of the output and the notifications (spec 005, RF-11) name a host the same way.
 
     Args:
         item (CertificateItem): The item.
@@ -201,7 +210,7 @@ def render_text(report: Report, lang: Lang) -> str:
             newline. Every value from the outside is escaped by :func:`printable`.
     """
     rows = [
-        (str(item.status), _host_name(item), _certificate_detail(item, lang))
+        (str(item.status), display_name(item), _certificate_detail(item, lang))
         for item in report.certificates
     ] + [
         (str(item.status), printable(item.entry.domain), _domain_detail(item, lang))

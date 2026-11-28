@@ -732,3 +732,22 @@ which is what RF-10 guards.
   the percent-encoded form (2 red), the values sorted shortest first (1 red), `smtp` listed without
   its table accepted (1 red), a channel twice accepted (1 red), and the port bound written `65536`
   (1 red).
+- **Stage 2:** `findings(report, error_runs)` gives the answers as a `dict` in the order of the
+  report (the certificates first), each a `Finding` or a `Mark` (`HOLD`, `RESOLVED`,
+  `UNCHECKABLE`), and the new `error_runs` without the zeros, so an entry no longer configured
+  leaves the count. `plan(told, answers)` takes no `order`: the answers already carry it, and the
+  removed entries follow in the order of `told`. A finding holds plain strings, not the enums of
+  the checks, so one read back from the state compares equal. `load_state` gives the state and a
+  `Notice` (a `state.*` key and its fields, `path` and, over the cap, `limit`); a missing file gives
+  no notice at all, so the catalogue has no `state.missing`. The keys are `state.unreadable` (a
+  directory, no permission, any `OSError`), `state.too_large`, `state.not_utf8`, `state.invalid`,
+  `state.version` (an integer that is not `1`) and `state.unwritable`, the line stage 5 writes
+  when `save_state` raises. Every object of the file must have exactly its keys, and a version
+  that is not an integer is `state.invalid`. `reset_for(state, channels, repository)` drops the
+  parts of the channels not listed and resets a GitHub part of another repository (compared
+  exactly) or of none. Seen failing (each change undone): the reminder compared with `<` (19 red),
+  the hold of the first `error` removed (6 red), the `REMOVED` events placed first (2 red), an
+  error kind counted as a change (2 red), the cap written `>=` (1 red), the write done in place
+  instead of through `os.replace` (3 red), the version left to the key check (3 red; the tests
+  found it unchecked before the fix), a GitHub part of another repository kept (3 red), and
+  the check of an `expiring` result without its date removed (1 red).
