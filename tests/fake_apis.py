@@ -6,6 +6,10 @@ GitHub channel on a :class:`~http_server.LocalHTTPServer`, through
 :meth:`~http_server.Route.handled` routes. It checks the headers and the token of every request,
 and a test can tell it to answer one kind of request with a fixed route instead (a refusal, a
 rate limit, a gone issue), to see each failure of the channel without a real API.
+
+:class:`FakeTelegram` answers ``sendMessage`` the same way: it records each message it accepts,
+checks the headers and the fields, and can be told to refuse the next ones as Telegram does (a
+wrong token, a chat the bot cannot write to, a rate limit).
 """
 
 from __future__ import annotations
@@ -18,17 +22,36 @@ from urllib.parse import urlsplit
 from http_server import LocalHTTPServer, RecordedRequest, Route
 from tlsvigil.github import API_VERSION, BOT_LOGIN
 
-__all__ = ["REPOSITORY", "TOKEN", "FakeGitHub", "FakeIssue", "Operation", "github_answer"]
+__all__ = [
+    "CHAT_ID",
+    "REPOSITORY",
+    "TELEGRAM_TOKEN",
+    "TOKEN",
+    "FakeGitHub",
+    "FakeIssue",
+    "FakeTelegram",
+    "Operation",
+    "Refusal",
+    "github_answer",
+    "telegram_answer",
+]
 
 # The repository and the token of the fake; the token is a made-up value, never a real one.
 REPOSITORY: Final = "octo-org/watched"
 TOKEN: Final = "fake-token-of-the-tests-0123456789"
+
+# The bot's token and the chat of the Telegram fake, made-up values in the forms Telegram uses.
+TELEGRAM_TOKEN: Final = "123:fake-telegram-token-of-the-tests"
+CHAT_ID: Final = "-1001234567890"
 
 # The issue numbers that get a route: more than any test opens.
 _NUMBERS: Final = range(1, 41)
 
 # The kinds of request the channel sends.
 type Operation = Literal["get", "list", "create", "comment", "update"]
+
+# The ways Telegram refuses a message that the tests play.
+type Refusal = Literal["token", "chat", "blocked", "rate"]
 
 
 def github_answer(
@@ -253,3 +276,120 @@ class FakeGitHub:
             issue.state = document.get("state", issue.state)
             issue.state_reason = document.get("state_reason", issue.state_reason)
         return Route(200, json.dumps(issue.document()).encode())
+
+
+# ---------------------------------------------------------------------------
+# Telegram
+# ---------------------------------------------------------------------------
+
+
+def telegram_answer(
+    status: int, description: str | None = None, parameters: dict[str, object] | None = None
+) -> Route:
+    """
+    Build a refusal as the Bot API writes one: ``ok`` false, the code and the description.
+
+    Args:
+        status (int): The status code, repeated as ``error_code``.
+        description (str | None): The ``description`` field, or ``None`` to leave it out.
+        parameters (dict[str, object] | None): The ``parameters`` field, such as
+            ``retry_after``.
+
+    Returns:
+        Route: The answer.
+    """
+    document: dict[str, object] = {"ok": False, "error_code": status}
+    if description is not None:
+        document["description"] = description
+    if parameters is not None:
+        document["parameters"] = parameters
+    return Route(status, json.dumps(document).encode(), {"Content-Type": "application/json"})
+
+
+# Telegram's own answers to each refusal.
+_REFUSALS: Final[dict[Refusal, Route]] = {
+    "token": telegram_answer(401, "Unauthorized"),
+    "chat": telegram_answer(400, "Bad Request: chat not found"),
+    "blocked": telegram_answer(403, "Forbidden: bot was blocked by the user"),
+    "rate": telegram_answer(429, "Too Many Requests: retry after 7", {"retry_after": 7}),
+}
+
+
+class FakeTelegram:
+    """
+    One bot, served as the Bot API serves ``sendMessage``.
+
+    Attributes:
+        messages (list[dict[str, object]]): The JSON body of each message accepted, in order.
+        answer (Route | None): A fixed answer that replaces the fake's own; the request is
+            still recorded.
+        problems (list[str]): What was wrong with the requests: a missing header or field.
+        requests (int): How many requests reached the fake.
+    """
+
+    def __init__(self) -> None:
+        """Start with no message."""
+        self.messages: list[dict[str, object]] = []
+        self.answer: Route | None = None
+        self.problems: list[str] = []
+        self.requests = 0
+
+    @property
+    def path(self) -> str:
+        """
+        Give the path of ``sendMessage`` for the fake's token.
+
+        Returns:
+            str: ``/bot<token>/sendMessage``.
+        """
+        return f"/bot{TELEGRAM_TOKEN}/sendMessage"
+
+    def install(self, server: LocalHTTPServer) -> str:
+        """
+        Answer ``sendMessage`` on a local server.
+
+        Args:
+            server (LocalHTTPServer): The running server.
+
+        Returns:
+            str: The API root to give the channel, the server's own URL.
+        """
+        server.routes[self.path] = Route.handled(self._handle)
+        return server.url("")
+
+    def refuse(self, refusal: Refusal) -> None:
+        """
+        Refuse every message from now on, as Telegram does in one case.
+
+        Args:
+            refusal (Refusal): The case: a wrong token, a chat not found, a bot blocked by
+                the user, or a rate limit.
+        """
+        self.answer = _REFUSALS[refusal]
+
+    def _handle(self, request: RecordedRequest) -> Route:
+        """
+        Answer one request, as the Bot API would.
+
+        Args:
+            request (RecordedRequest): The request.
+
+        Returns:
+            Route: The answer.
+        """
+        self.requests += 1
+        if request.method != "POST":
+            self.problems.append(f"method {request.method}")
+        if request.header("Content-Type") != "application/json":
+            self.problems.append("Content-Type")
+        if not (request.header("User-Agent") or "").startswith("tlsvigil/"):
+            self.problems.append("User-Agent")
+        if self.answer is not None:
+            return self.answer
+        document = json.loads(request.body)
+        if document.get("chat_id") != CHAT_ID or not isinstance(document.get("text"), str):
+            self.problems.append("chat_id or text")
+        self.messages.append(document)
+        result = {"message_id": len(self.messages), "chat": {"id": int(CHAT_ID)}}
+        body = json.dumps({"ok": True, "result": {**result, "text": document.get("text")}})
+        return Route(200, body.encode(), {"Content-Type": "application/json"})
