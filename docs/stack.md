@@ -6,10 +6,10 @@ and the handful of concepts worth learning first if it is new to you.
 This is not exhaustive: the full version graph is pinned in `uv.lock`, and per-feature decisions
 live in the `### ADR-N` blocks of `specs/*/design.md`. This page is the map: the *shape* of the
 project and the reasoning behind each piece. The project is not released yet (`1.0.0.dev0`): today
-the package is the skeleton, the quality gate, the CI and the certificate check (a library
-function that no command calls), and `tlsvigil --version` is the only command that runs. The
-pieces marked **planned** below are specified for the next specs (the RDAP lookup, the
-configuration and output, the notifications and the composite Action) and are not code yet.
+the package is the skeleton, the quality gate, the CI, the certificate check and the domain check
+(library functions that no command calls), and `tlsvigil --version` is the only command that runs.
+The pieces marked **planned** below are specified for the next specs (the configuration and
+output, the notifications and the composite Action) and are not code yet.
 
 The project is one small program with no runtime dependency:
 
@@ -20,7 +20,7 @@ GitHub Actions schedule (cron)  ──►  tlsvigil  (CLI, argparse)            
         ▼                               ▼                             ▼
  configuration (TOML)           certificate check              domain check
  tomllib            planned     socket + ssl, verified         IANA bootstrap ──► RDAP server
-                                TLS handshake        built     HTTPS, bounded     planned
+                                TLS handshake        built     HTTPS, bounded       built
         │                               │                             │
         └───────────────────────────────┴──────────────┬──────────────┘
                                                        ▼
@@ -129,26 +129,34 @@ that Python 3.13 added to the defaults.
 **Docs:** [`ssl`](https://docs.python.org/3.12/library/ssl.html) ·
 [`socket`](https://docs.python.org/3.12/library/socket.html)
 
-### `urllib.request` and RDAP
+### `http.client` and RDAP
 
-**Planned.** The domain check asks the registry's RDAP server (JSON over HTTPS) for the `expiration`
-event of the domain. The server is found through the IANA bootstrap file, which maps each top-level
-domain to its RDAP base URL. Each request is HTTPS only, to the server the bootstrap names, with a
-timeout, a cap on the size of the answer and no redirect to another host.
+The domain check (`rdap.py`) asks the registry's RDAP server (JSON over HTTPS) for the
+`expiration` event of the domain. The server is found through the IANA bootstrap file, which maps
+each top-level domain to its RDAP base URL; one `RdapClient` fetches it on the first domain of a
+run and reuses it for the others. Each request is one `http.client.HTTPSConnection`, HTTPS only,
+verified with the same context as the certificate check, under one deadline for the whole
+request, with a cap on the size of the answer (2 MiB for the bootstrap, 512 KiB for a domain) and
+no compression. A redirect is followed only on the same scheme, host and port, three times at
+most. Every way a check can end (no RDAP service, no date in the record, a refused connection, a
+body too large) comes back as a value, never as an exception.
 
-**Why this:** against `requests` or `httpx`, `urllib` is a dependency less, and the traffic is two
-simple `GET`s. RDAP is the standardised, JSON successor of WHOIS; against parsing WHOIS text, it
-needs no per-registry format. Against the lower-level `http.client`, `urllib.request` puts the
-verified HTTPS context, the proxy settings of the environment and the redirect policy in one opener.
-The bound on the answer and the refusal to follow a redirect are what keep an external server from
-steering the tool.
+**Why this:** against `requests` or `httpx`, the standard library is a dependency less, and the
+traffic is two simple `GET`s. RDAP is the standardised, JSON successor of WHOIS; against parsing
+WHOIS text, it needs no per-registry format. Against `urllib.request`, `http.client` has nothing
+to switch off: it reads no proxy variable from the environment, has no `file:` or `ftp:` handler,
+returns a redirect as a status the code looks at, and every error status as a value instead of an
+`HTTPError`. The price is about thirty lines (the redirect loop, the `Location` join) and no
+connection reuse, which a daily run does not need. The bound on the answer and the refusal to
+follow a redirect elsewhere are what keep an external server from steering the tool.
 
 **Learn:** RDAP (RFC 9083, the JSON response; RFC 9224, the bootstrap), the `events` array and the
-`expiration` event action, `urllib.request.build_opener` with a redirect handler that refuses, and
-reading a response in bounded chunks. Some top-level domains publish no RDAP service and some
-registries leave the date out; both end as "not checked", never as a guess.
+`expiration` event action, `HTTPSConnection(host, port, context=..., timeout=...)`,
+`getresponse()` and `read1()` for reading a body in bounded chunks, and `urljoin` for a relative
+`Location`. Some top-level domains publish no RDAP service and some registries leave the date out;
+both end as "not checked", never as a guess.
 
-**Docs:** [`urllib.request`](https://docs.python.org/3.12/library/urllib.request.html) ·
+**Docs:** [`http.client`](https://docs.python.org/3.12/library/http.client.html) ·
 [RFC 9083](https://datatracker.ietf.org/doc/html/rfc9083) ·
 [RFC 9224](https://datatracker.ietf.org/doc/html/rfc9224)
 
@@ -326,7 +334,9 @@ The test certificates. `trustme` makes, during the test run, a certificate autho
 intermediate and leaves with chosen names and dates; `cryptography`, already its dependency, makes
 the two certificates `trustme` has no option for (a self-signed leaf and a leaf without an
 Authority Key Identifier, in `tests/certs.py`). A threaded server in `tests/tls_server.py` serves
-them on `127.0.0.1` and `::1`, and an autouse guard (`tests/network_guard.py`) fails any lookup or
+them on `127.0.0.1` and `::1`, a second one in `tests/http_server.py` serves hand-written RDAP
+documents over HTTPS (and the answers that misbehave: silent, dripping, endless), and an autouse
+guard (`tests/network_guard.py`) fails any lookup or
 connection that leaves the loopback interface. Both packages are in the dev group only: the wheel
 still declares no dependency.
 

@@ -1,6 +1,6 @@
 ---
 feature: Domain expiry over RDAP — the IANA bootstrap, the expiration event, bounded HTTPS requests, and the offline RDAP server
-status: in progress
+status: done
 date: 2026-11-27
 related:
   - 003-rdap/requirements.md
@@ -141,12 +141,17 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 3 — Documentation and closing
 
-- [ ] `docs/stack.md`: the section on `urllib.request` and RDAP becomes `http.client` and RDAP, in
-  use, with why `http.client` was chosen. — ADR-2
-- [ ] `CLAUDE.md`: "Architecture" names `rdap.py` and `http_server.py`; "Before you touch" gains
-  the row for `src/tlsvigil/rdap.py` (spec `003`, ADR-2 to ADR-5). — RF-08
-- [ ] `specs/README.md`: the `003-rdap` row with delivery `v0.3` and status `done`.
-- [ ] Traceability: every RF, RNF and ADR cited here exists, every RF is cited by a task, and the
-  `status` is the same in the three files and the roadmap.
-- [ ] `status: done` in the three files; deviations and measurements in the design.
-- [ ] Quality gate. — <result>
+- [x] `docs/stack.md`: the section on `urllib.request` and RDAP becomes `http.client` and RDAP, in
+  use, with why `http.client` was chosen. — ADR-2. Also: the domain check marked built in the
+  diagram and the opening, and `tests/http_server.py` named in the section on the test harness.
+- [x] `CLAUDE.md`: "Architecture" names `rdap.py` and `http_server.py`; "Before you touch" gains
+  the row for `src/tlsvigil/rdap.py` (spec `003`, ADR-2 to ADR-5). — RF-08. Also:
+  `tests/data/rdap/` in the tree, and a row for `tests/http_server.py` (ADR-7, deviation 3).
+- [x] `specs/README.md`: the `003-rdap` row with delivery `v0.3` and status `done`.
+- [x] Traceability: every RF, RNF and ADR cited here exists, every RF is cited by a task, and the
+  `status` is the same in the three files and the roadmap. — RF-01 to RF-09, RNF-01 to RNF-05 and
+  ADR-1 to ADR-8 are each cited by a task (ADR-3 inside the range ADR-2 to ADR-5), and no
+  other identifier is.
+- [x] `status: done` in the three files; deviations and measurements in the design.
+- [x] Quality gate. — 329 passed in 20 s; ruff/black/mypy green; `src` at 100% of lines and
+  branches
