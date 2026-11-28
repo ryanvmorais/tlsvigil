@@ -36,13 +36,16 @@ __all__ = [
     "MAX_DOMAIN_BYTES",
     "MAX_REDIRECTS",
     "Bootstrap",
+    "DomainProblem",
     "DomainResult",
     "ErrorKind",
+    "InvalidDomain",
     "Outcome",
     "RdapClient",
     "Status",
     "UnknownReason",
     "classify",
+    "normalize_domain",
 ]
 
 # The IANA bootstrap for DNS (RFC 9224); the only bootstrap the tool reads.
@@ -196,9 +199,70 @@ _LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 _MAX_NAME_LENGTH = 253
 
 
-def _normalize_domain(domain: str) -> str:
+class DomainProblem(StrEnum):
+    """
+    Which rule a domain broke (RF-07; spec 004, ADR-2).
+
+    The configuration maps each member to a translated sentence, so a rule lives here once.
+
+    Attributes:
+        EMPTY (str): The domain is not a string, or is empty.
+        WHITESPACE (str): The domain contains whitespace.
+        URL_OR_PATH (str): The domain contains ``/``: a URL or a path.
+        PORT (str): The domain contains ``:``: a port, or an IPv6 address.
+        USER_INFO (str): The domain contains ``@``.
+        UNDERSCORE (str): The domain contains ``_``, which a registered name never holds.
+        NOT_ASCII (str): The domain has letters outside ASCII; the ``xn--`` form is expected.
+        ONE_LABEL (str): The domain is a single label, a top-level domain alone.
+        EMPTY_LABEL (str): The domain has an empty label (``..``, a leading dot, two trailing).
+        BAD_LABEL (str): A label is not 1 to 63 letters, digits or inner hyphens.
+        TOO_LONG (str): The domain is longer than 253 characters.
+        NUMERIC (str): The last label is all digits, as in an IPv4 address.
+    """
+
+    EMPTY = "empty"
+    WHITESPACE = "whitespace"
+    URL_OR_PATH = "url_or_path"
+    PORT = "port"
+    USER_INFO = "user_info"
+    UNDERSCORE = "underscore"
+    NOT_ASCII = "not_ascii"
+    ONE_LABEL = "one_label"
+    EMPTY_LABEL = "empty_label"
+    BAD_LABEL = "bad_label"
+    TOO_LONG = "too_long"
+    NUMERIC = "numeric"
+
+
+class InvalidDomain(ValueError):
+    """
+    A domain the check refuses (RF-07).
+
+    A subclass of :class:`ValueError`, so every caller that catches the base keeps working; the
+    message stays the English text of spec 003.
+
+    Attributes:
+        code (DomainProblem): The rule that was broken.
+    """
+
+    def __init__(self, code: DomainProblem, message: str) -> None:
+        """
+        Keep the code beside the message.
+
+        Args:
+            code (DomainProblem): The rule that was broken.
+            message (str): The English text, naming the bad value.
+        """
+        super().__init__(message)
+        self.code = code
+
+
+def normalize_domain(domain: str) -> str:
     """
     Refuse a name that is not a registered domain, and give it in its canonical form (RF-07).
+
+    The configuration calls it too (spec 004, ADR-2), so the file accepts exactly the domains the
+    check accepts.
 
     Args:
         domain (str): The domain as registered, such as ``example.com.br``; capital letters and
@@ -208,46 +272,69 @@ def _normalize_domain(domain: str) -> str:
         str: The name in lowercase, without the trailing dot.
 
     Raises:
-        ValueError: Naming the problem; for letters outside ASCII, pointing to the ``xn--`` form.
+        InvalidDomain: Naming the problem, with the rule as its code; for letters outside ASCII,
+            pointing to the ``xn--`` form.
     """
     if type(domain) is not str or not domain:
-        raise ValueError("domain must be a non-empty string")
+        raise InvalidDomain(DomainProblem.EMPTY, "domain must be a non-empty string")
     if any(char.isspace() for char in domain):
-        raise ValueError(f"domain must not contain whitespace: {domain!r}")
+        raise InvalidDomain(
+            DomainProblem.WHITESPACE, f"domain must not contain whitespace: {domain!r}"
+        )
     # "://" is covered by "/": a URL is refused whatever its scheme.
     if "/" in domain:
-        raise ValueError(f"domain must be a name, not a URL or a path: {domain!r}")
+        raise InvalidDomain(
+            DomainProblem.URL_OR_PATH, f"domain must be a name, not a URL or a path: {domain!r}"
+        )
     # ":" also refuses every IPv6 address.
     if ":" in domain:
-        raise ValueError(f"domain must not contain a port or a ':': {domain!r}")
+        raise InvalidDomain(
+            DomainProblem.PORT, f"domain must not contain a port or a ':': {domain!r}"
+        )
     if "@" in domain:
-        raise ValueError(f"domain must not contain user information: {domain!r}")
+        raise InvalidDomain(
+            DomainProblem.USER_INFO, f"domain must not contain user information: {domain!r}"
+        )
     if "_" in domain:
-        raise ValueError(f"domain must contain letters, digits, hyphens and dots only: {domain!r}")
+        raise InvalidDomain(
+            DomainProblem.UNDERSCORE,
+            f"domain must contain letters, digits, hyphens and dots only: {domain!r}",
+        )
     if not domain.isascii():
         # The idna codec follows IDNA 2003 and registries IDNA 2008; converting here could ask
         # about another domain (requirements, resolved decision 5).
-        raise ValueError(
-            f"domain must be given in its ASCII form: write the 'xn--' form of {domain!r}"
+        raise InvalidDomain(
+            DomainProblem.NOT_ASCII,
+            f"domain must be given in its ASCII form: write the 'xn--' form of {domain!r}",
         )
 
     name = domain.lower().removesuffix(".")
     labels = name.split(".")
     if len(labels) < 2:
-        raise ValueError(f"domain must have at least two labels: {domain!r}")
+        raise InvalidDomain(
+            DomainProblem.ONE_LABEL, f"domain must have at least two labels: {domain!r}"
+        )
     if "" in labels:
-        raise ValueError(f"domain must not have an empty label: {domain!r}")
+        raise InvalidDomain(
+            DomainProblem.EMPTY_LABEL, f"domain must not have an empty label: {domain!r}"
+        )
     for label in labels:
         if not _LABEL.fullmatch(label):
-            raise ValueError(
+            raise InvalidDomain(
+                DomainProblem.BAD_LABEL,
                 "each label must be 1 to 63 letters, digits or inner hyphens: "
-                f"{label!r} in {domain!r}"
+                f"{label!r} in {domain!r}",
             )
     if len(name) > _MAX_NAME_LENGTH:
-        raise ValueError(f"domain must be {_MAX_NAME_LENGTH} characters or fewer: {domain!r}")
+        raise InvalidDomain(
+            DomainProblem.TOO_LONG,
+            f"domain must be {_MAX_NAME_LENGTH} characters or fewer: {domain!r}",
+        )
     # No top-level domain is all digits; this refuses every IPv4 address too.
     if labels[-1].isdigit():
-        raise ValueError(f"domain must not end in a numeric label: {domain!r}")
+        raise InvalidDomain(
+            DomainProblem.NUMERIC, f"domain must not end in a numeric label: {domain!r}"
+        )
     return name
 
 
@@ -801,9 +888,10 @@ class RdapClient:
                 reason the date is unknown, or ``ERROR`` with the kind of failure.
 
         Raises:
-            ValueError: When the domain or ``now`` is bad; no request is sent then.
+            ValueError: When the domain or ``now`` is bad; no request is sent then. A bad domain
+                raises the subclass :class:`InvalidDomain`.
         """
-        name = _normalize_domain(domain)
+        name = normalize_domain(domain)
         _validate_now(now)
         checked_at = datetime.now(UTC) if now is None else now.astimezone(UTC)
 

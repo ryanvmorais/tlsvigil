@@ -13,7 +13,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from tlsvigil.rdap import BOOTSTRAP_URL, RdapClient, _normalize_domain, _validate_now
+from tlsvigil.rdap import (
+    BOOTSTRAP_URL,
+    DomainProblem,
+    InvalidDomain,
+    RdapClient,
+    _validate_now,
+    normalize_domain,
+)
 
 # The longest name accepted and one character more; every label stays valid, so only the length
 # of the whole name can refuse the second.
@@ -26,28 +33,28 @@ NAME_254 = ".".join(["a" * 63] * 3 + ["a" * 58]) + ".com"
 
 
 @pytest.mark.parametrize(
-    ("domain", "message"),
+    ("domain", "message", "code"),
     [
-        ("", "non-empty string"),
-        ("https://example.com", "not a URL or a path"),
-        ("example.com/path", "not a URL or a path"),
-        ("example.com:443", "port"),
-        ("example .com", "whitespace"),
-        ("example.com\n", "whitespace"),
-        ("user@example.com", "user information"),
-        ("_dmarc.example.com", "letters, digits, hyphens and dots only"),
-        ("exa*mple.com", "1 to 63 letters"),
-        ("-example.com", "1 to 63 letters"),
-        ("example-.com", "1 to 63 letters"),
-        ("com", "at least two labels"),
-        ("com.", "at least two labels"),
-        ("example..com", "empty label"),
-        (".example.com", "empty label"),
-        ("example.com..", "empty label"),
-        ("a" * 64 + ".com", "1 to 63 letters"),
-        (NAME_254, "253 characters or fewer"),
-        ("192.0.2.1", "numeric label"),
-        ("2001:db8::1", "port"),
+        ("", "non-empty string", DomainProblem.EMPTY),
+        ("https://example.com", "not a URL or a path", DomainProblem.URL_OR_PATH),
+        ("example.com/path", "not a URL or a path", DomainProblem.URL_OR_PATH),
+        ("example.com:443", "port", DomainProblem.PORT),
+        ("example .com", "whitespace", DomainProblem.WHITESPACE),
+        ("example.com\n", "whitespace", DomainProblem.WHITESPACE),
+        ("user@example.com", "user information", DomainProblem.USER_INFO),
+        ("_dmarc.example.com", "letters, digits, hyphens and dots only", DomainProblem.UNDERSCORE),
+        ("exa*mple.com", "1 to 63 letters", DomainProblem.BAD_LABEL),
+        ("-example.com", "1 to 63 letters", DomainProblem.BAD_LABEL),
+        ("example-.com", "1 to 63 letters", DomainProblem.BAD_LABEL),
+        ("com", "at least two labels", DomainProblem.ONE_LABEL),
+        ("com.", "at least two labels", DomainProblem.ONE_LABEL),
+        ("example..com", "empty label", DomainProblem.EMPTY_LABEL),
+        (".example.com", "empty label", DomainProblem.EMPTY_LABEL),
+        ("example.com..", "empty label", DomainProblem.EMPTY_LABEL),
+        ("a" * 64 + ".com", "1 to 63 letters", DomainProblem.BAD_LABEL),
+        (NAME_254, "253 characters or fewer", DomainProblem.TOO_LONG),
+        ("192.0.2.1", "numeric label", DomainProblem.NUMERIC),
+        ("2001:db8::1", "port", DomainProblem.PORT),
     ],
     ids=[
         "empty",
@@ -72,20 +79,32 @@ NAME_254 = ".".join(["a" * 63] * 3 + ["a" * 58]) + ".com"
         "ipv6",
     ],
 )
-def test_a_bad_domain_is_refused_with_the_problem_named(domain: str, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        _normalize_domain(domain)
+def test_a_bad_domain_is_refused_with_the_problem_named(
+    domain: str, message: str, code: DomainProblem
+) -> None:
+    """The message names the problem, and the code names the rule (spec 004, ADR-2)."""
+    with pytest.raises(ValueError, match=message) as raised:
+        normalize_domain(domain)
+
+    assert isinstance(raised.value, InvalidDomain)
+    assert raised.value.code is code
 
 
 @pytest.mark.parametrize("domain", [None, 1, b"example.com"], ids=["none", "int", "bytes"])
 def test_a_domain_that_is_not_a_string_is_refused(domain: object) -> None:
-    with pytest.raises(ValueError, match="non-empty string"):
-        _normalize_domain(domain)  # type: ignore[arg-type]  # the type a caller may still pass
+    with pytest.raises(ValueError, match="non-empty string") as raised:
+        normalize_domain(domain)  # type: ignore[arg-type]  # the type a caller may still pass
+
+    assert isinstance(raised.value, InvalidDomain)
+    assert raised.value.code is DomainProblem.EMPTY
 
 
 def test_a_name_with_letters_outside_ascii_points_to_the_xn_form() -> None:
-    with pytest.raises(ValueError, match=re.escape("'xn--' form of 'pão.com.br'")):
-        _normalize_domain("pão.com.br")
+    with pytest.raises(ValueError, match=re.escape("'xn--' form of 'pão.com.br'")) as raised:
+        normalize_domain("pão.com.br")
+
+    assert isinstance(raised.value, InvalidDomain)
+    assert raised.value.code is DomainProblem.NOT_ASCII
 
 
 @pytest.mark.parametrize(
@@ -104,7 +123,7 @@ def test_a_valid_domain_is_given_in_lowercase_without_the_trailing_dot(
     domain: str, expected: str
 ) -> None:
     """The control of the table above: the limits themselves are accepted."""
-    assert _normalize_domain(domain) == expected
+    assert normalize_domain(domain) == expected
 
 
 def test_the_length_cases_sit_on_the_limit() -> None:

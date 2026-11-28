@@ -28,11 +28,13 @@ from tls_server import LocalServer
 from tlsvigil.certificate import (
     CertificateResult,
     ErrorKind,
+    HostProblem,
+    InvalidHost,
     InvalidReason,
     Outcome,
-    _validate,
     check_certificate,
     create_context,
+    validate_host,
 )
 
 Serve = Callable[..., LocalServer]
@@ -521,49 +523,59 @@ def test_a_server_limited_to_tls_1_1_is_a_tls_error(
 
 BAD_ARGUMENTS: list[Any] = [
     # Hosts
-    pytest.param({"host": ""}, "host", id="empty host"),
-    pytest.param({"host": None}, "host", id="host not a string"),
-    pytest.param({"host": b"localhost"}, "host", id="host as bytes"),
-    pytest.param({"host": " localhost"}, "host", id="leading space"),
-    pytest.param({"host": "localhost\n"}, "host", id="trailing newline"),
-    pytest.param({"host": "local host"}, "host", id="inner space"),
-    pytest.param({"host": "https://localhost"}, "host", id="URL"),
-    pytest.param({"host": "localhost/path"}, "host", id="path"),
-    pytest.param({"host": "[::1]"}, "host", id="bracketed address"),
-    pytest.param({"host": "user@localhost"}, "host", id="user info"),
-    pytest.param({"host": "localhost:443"}, "host", id="port in the host"),
-    pytest.param({"host": "127.0.0.1:443"}, "host", id="port after an IPv4 address"),
+    pytest.param({"host": ""}, "host", HostProblem.EMPTY, id="empty host"),
+    pytest.param({"host": None}, "host", HostProblem.EMPTY, id="host not a string"),
+    pytest.param({"host": b"localhost"}, "host", HostProblem.EMPTY, id="host as bytes"),
+    pytest.param({"host": " localhost"}, "host", HostProblem.WHITESPACE, id="leading space"),
+    pytest.param({"host": "localhost\n"}, "host", HostProblem.WHITESPACE, id="trailing newline"),
+    pytest.param({"host": "local host"}, "host", HostProblem.WHITESPACE, id="inner space"),
+    pytest.param({"host": "https://localhost"}, "host", HostProblem.URL_OR_PATH, id="URL"),
+    pytest.param({"host": "localhost/path"}, "host", HostProblem.URL_OR_PATH, id="path"),
+    pytest.param({"host": "[::1]"}, "host", HostProblem.URL_OR_PATH, id="bracketed address"),
+    pytest.param({"host": "user@localhost"}, "host", HostProblem.URL_OR_PATH, id="user info"),
+    pytest.param(
+        {"host": "localhost:443"}, "host", HostProblem.PORT_IN_HOST, id="port in the host"
+    ),
+    pytest.param(
+        {"host": "127.0.0.1:443"}, "host", HostProblem.PORT_IN_HOST, id="port after an IPv4 address"
+    ),
     # Ports
-    pytest.param({"port": 0}, "port", id="port 0"),
-    pytest.param({"port": 65536}, "port", id="port 65536"),
-    pytest.param({"port": -443}, "port", id="negative port"),
-    pytest.param({"port": True}, "port", id="port as bool"),
-    pytest.param({"port": 443.0}, "port", id="port as float"),
-    pytest.param({"port": "443"}, "port", id="port as string"),
+    pytest.param({"port": 0}, "port", HostProblem.PORT, id="port 0"),
+    pytest.param({"port": 65536}, "port", HostProblem.PORT, id="port 65536"),
+    pytest.param({"port": -443}, "port", HostProblem.PORT, id="negative port"),
+    pytest.param({"port": True}, "port", HostProblem.PORT, id="port as bool"),
+    pytest.param({"port": 443.0}, "port", HostProblem.PORT, id="port as float"),
+    pytest.param({"port": "443"}, "port", HostProblem.PORT, id="port as string"),
     # Timeouts
-    pytest.param({"timeout": 0}, "timeout", id="timeout 0"),
-    pytest.param({"timeout": -1.0}, "timeout", id="negative timeout"),
-    pytest.param({"timeout": math.inf}, "timeout", id="infinite timeout"),
-    pytest.param({"timeout": math.nan}, "timeout", id="timeout NaN"),
-    pytest.param({"timeout": True}, "timeout", id="timeout as bool"),
-    pytest.param({"timeout": "5"}, "timeout", id="timeout as string"),
-    pytest.param({"timeout": None}, "timeout", id="timeout None"),
+    pytest.param({"timeout": 0}, "timeout", None, id="timeout 0"),
+    pytest.param({"timeout": -1.0}, "timeout", None, id="negative timeout"),
+    pytest.param({"timeout": math.inf}, "timeout", None, id="infinite timeout"),
+    pytest.param({"timeout": math.nan}, "timeout", None, id="timeout NaN"),
+    pytest.param({"timeout": True}, "timeout", None, id="timeout as bool"),
+    pytest.param({"timeout": "5"}, "timeout", None, id="timeout as string"),
+    pytest.param({"timeout": None}, "timeout", None, id="timeout None"),
     # Time: naive on purpose, the one kind of time the check refuses
-    pytest.param({"now": datetime(2026, 1, 1)}, "now", id="naive now"),
+    pytest.param({"now": datetime(2026, 1, 1)}, "now", None, id="naive now"),
 ]
 
 
-@pytest.mark.parametrize(("bad", "argument"), BAD_ARGUMENTS)
+@pytest.mark.parametrize(("bad", "argument", "code"), BAD_ARGUMENTS)
 def test_a_bad_argument_is_refused_before_any_lookup_or_connection(
-    network_guard: NetworkGuard, bad: dict[str, Any], argument: str
+    network_guard: NetworkGuard, bad: dict[str, Any], argument: str, code: HostProblem | None
 ) -> None:
+    """A bad host or port carries its rule as a code (spec 004, ADR-2); the others do not."""
     arguments: dict[str, Any] = {"host": "localhost", "port": 443, "timeout": 5.0} | bad
     host = arguments.pop("host")
     port = arguments.pop("port")
 
-    with pytest.raises(ValueError, match=f"^{argument} must"):
+    with pytest.raises(ValueError, match=f"^{argument} must") as raised:
         check_certificate(host, port, **arguments)
 
+    if code is None:
+        assert type(raised.value) is ValueError
+    else:
+        assert isinstance(raised.value, InvalidHost)
+        assert raised.value.code is code
     assert network_guard.lookups == []
     assert network_guard.connects == []
 
@@ -583,4 +595,4 @@ def test_valid_arguments_reach_the_server(
 @pytest.mark.parametrize("host", ["::1", "2001:db8::1", "fe80::1"])
 def test_an_ipv6_address_is_a_valid_host(host: str) -> None:
     # Positive control for the ':' rule: an IPv6 address is the one host that may contain ':'.
-    _validate(host, 443, 5.0, None)
+    validate_host(host, 443)

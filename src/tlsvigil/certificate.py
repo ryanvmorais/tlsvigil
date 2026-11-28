@@ -24,12 +24,15 @@ from enum import StrEnum
 __all__ = [
     "CertificateResult",
     "ErrorKind",
+    "HostProblem",
+    "InvalidHost",
     "InvalidReason",
     "Outcome",
     "Status",
     "check_certificate",
     "classify",
     "create_context",
+    "validate_host",
 ]
 
 
@@ -153,6 +156,90 @@ class CertificateResult:
 _FORBIDDEN_IN_HOST = frozenset("/[]@")
 
 
+class HostProblem(StrEnum):
+    """
+    Which rule a host or a port broke (RF-06; spec 004, ADR-2).
+
+    The configuration maps each member to a translated sentence, so a rule lives here once.
+
+    Attributes:
+        EMPTY (str): The host is not a string, or is empty.
+        WHITESPACE (str): The host contains whitespace.
+        URL_OR_PATH (str): The host contains ``/``, ``[``, ``]`` or ``@``: a URL, a path, a
+            bracketed address or user information.
+        PORT_IN_HOST (str): The host contains ``:`` and is not an IPv6 address.
+        PORT (str): The port is not an integer from ``1`` to ``65535``.
+    """
+
+    EMPTY = "empty"
+    WHITESPACE = "whitespace"
+    URL_OR_PATH = "url_or_path"
+    PORT_IN_HOST = "port_in_host"
+    PORT = "port"
+
+
+class InvalidHost(ValueError):
+    """
+    A host or a port the check refuses (RF-06).
+
+    A subclass of :class:`ValueError`, so every caller that catches the base keeps working; the
+    message stays the English text of spec 002.
+
+    Attributes:
+        code (HostProblem): The rule that was broken.
+    """
+
+    def __init__(self, code: HostProblem, message: str) -> None:
+        """
+        Keep the code beside the message.
+
+        Args:
+            code (HostProblem): The rule that was broken.
+            message (str): The English text, naming the bad value.
+        """
+        super().__init__(message)
+        self.code = code
+
+
+def validate_host(host: str, port: int) -> None:
+    """
+    Refuse a host or a port the check would refuse, without any lookup (RF-06).
+
+    The configuration calls it too (spec 004, ADR-2), so the file accepts exactly the hosts the
+    check accepts.
+
+    Args:
+        host (str): A DNS name or an IP address, without scheme, path, brackets or port.
+        port (int): The TCP port, from ``1`` to ``65535``.
+
+    Raises:
+        InvalidHost: Naming the bad value, with the rule as its code.
+    """
+    if type(host) is not str or not host:
+        raise InvalidHost(HostProblem.EMPTY, "host must be a non-empty string")
+    if any(char.isspace() for char in host):
+        raise InvalidHost(HostProblem.WHITESPACE, f"host must not contain whitespace: {host!r}")
+    # "://" is covered by "/": a URL is refused whatever its scheme.
+    if any(char in _FORBIDDEN_IN_HOST for char in host):
+        raise InvalidHost(
+            HostProblem.URL_OR_PATH,
+            f"host must be a name or an IP address, not a URL or a path: {host!r}",
+        )
+    if ":" in host:
+        # Only an IPv6 address may contain ":"; "example.com:443" passes the port in the host.
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            raise InvalidHost(
+                HostProblem.PORT_IN_HOST,
+                f"host must not contain a port or a ':' unless it is an IPv6 address: {host!r}",
+            ) from None
+
+    # `type(...) is` and not isinstance: bool is a subclass of int, and True is not a port.
+    if type(port) is not int or not 1 <= port <= 65535:
+        raise InvalidHost(HostProblem.PORT, f"port must be an integer from 1 to 65535: {port!r}")
+
+
 def _validate(host: str, port: int, timeout: float, now: datetime | None) -> None:
     """
     Refuse bad arguments before any socket exists (RF-06).
@@ -164,27 +251,10 @@ def _validate(host: str, port: int, timeout: float, now: datetime | None) -> Non
         now (datetime | None): The time to count from; when given, it must be aware.
 
     Raises:
-        ValueError: Naming the bad argument.
+        InvalidHost: For the host or the port, naming the bad value.
+        ValueError: For the timeout or ``now``, naming the bad argument.
     """
-    if type(host) is not str or not host:
-        raise ValueError("host must be a non-empty string")
-    if any(char.isspace() for char in host):
-        raise ValueError(f"host must not contain whitespace: {host!r}")
-    # "://" is covered by "/": a URL is refused whatever its scheme.
-    if any(char in _FORBIDDEN_IN_HOST for char in host):
-        raise ValueError(f"host must be a name or an IP address, not a URL or a path: {host!r}")
-    if ":" in host:
-        # Only an IPv6 address may contain ":"; "example.com:443" passes the port in the host.
-        try:
-            ipaddress.ip_address(host)
-        except ValueError:
-            raise ValueError(
-                f"host must not contain a port or a ':' unless it is an IPv6 address: {host!r}"
-            ) from None
-
-    # `type(...) is` and not isinstance: bool is a subclass of int, and True is not a port.
-    if type(port) is not int or not 1 <= port <= 65535:
-        raise ValueError(f"port must be an integer from 1 to 65535: {port!r}")
+    validate_host(host, port)
 
     if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError(f"timeout must be a finite number of seconds greater than 0: {timeout!r}")
@@ -310,7 +380,8 @@ def check_certificate(
             reason of the failed verification, or ``ERROR`` with the kind of failure.
 
     Raises:
-        ValueError: When an argument is bad; no socket exists yet then (RF-06).
+        ValueError: When an argument is bad; no socket exists yet then (RF-06). A bad host or
+            port raises the subclass :class:`InvalidHost`.
     """
     _validate(host, port, timeout, now)
     checked_at = datetime.now(UTC) if now is None else now.astimezone(UTC)
