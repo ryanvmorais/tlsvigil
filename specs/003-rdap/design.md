@@ -1,6 +1,6 @@
 ---
 feature: Domain expiry over RDAP — the IANA bootstrap, the expiration event, bounded HTTPS requests, and the offline RDAP server
-status: in progress
+status: done
 date: 2026-11-27
 related:
   - 003-rdap/requirements.md
@@ -510,3 +510,6 @@ domain object, and the `.br` and `.com` answers carry it.
   that `http.client` hands to the answer, to set its timeout to the time left before the status
   line and before each read. `test_rdap_check.py` holds 35 tests against the local server; the
   slowest is the refused connection, about 2 s on the Windows loopback, as in spec `002`.
+- **Stage 3:** documentation only, with no new deviation: `docs/stack.md` describes the check
+  as built on `http.client` (ADR-2), and `CLAUDE.md` maps `rdap.py`, `tests/http_server.py` and
+  `tests/data/rdap/` to this spec. The whole suite, 329 tests, runs in about 20 s.

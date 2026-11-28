@@ -58,11 +58,14 @@ password) come from the CI's secret store, never from a file in the repository. 
 
 ```text
 src/tlsvigil/       # the package: cli.py (argparse entry point), __main__.py (python -m tlsvigil),
-                    #   certificate.py (the verified TLS check, its result type and classify())
+                    #   certificate.py (the verified TLS check, its result type and classify()),
+                    #   rdap.py (the domain check: IANA bootstrap, bounded HTTPS, RdapClient)
 tests/              # pytest; the CLI is driven through main(argv), and the docs have tests too
   conftest.py       # installs the network guard (autouse) and the CA and local-server fixtures
   network_guard.py  # resolve and connect on loopback only; anything else fails the test
   tls_server.py     # LocalServer: a TLS, silent or plain-text server on 127.0.0.1 and ::1
+  http_server.py    # LocalHTTPServer: HTTPS routes (RDAP documents, silent, drip, endless)
+  data/rdap/        # the hand-written RDAP answers the tests read and serve
   certs.py          # the test certificates trustme does not make (self-signed, no AKI)
 specs/              # spec-driven development: requirements → design → tasks per feature
 docs/               # stack.md: each technology and why it was chosen
@@ -72,10 +75,10 @@ docs/               # stack.md: each technology and why it was chosen
 uv.lock             # never edit by hand (generated; a hook blocks it)
 ```
 
-The certificate check (spec 002) is a library function; no command calls it. The specs to
-come add, in this order: the RDAP lookup (003), the configuration, the output, `--json`, `--lang`
-and the exit codes (004), the notifications without duplicates (005), and the composite Action in
-`action.yml` (006).
+The certificate check (spec 002) and the domain check over RDAP (spec 003) are library
+functions; no command calls them. The specs to come add, in this order: the configuration, the
+output, `--json`, `--lang` and the exit codes (004), the notifications without duplicates (005),
+and the composite Action in `action.yml` (006).
 
 ### Before you touch…
 
@@ -83,7 +86,9 @@ and the exit codes (004), the notifications without duplicates (005), and the co
 |---|---|
 | `pyproject.toml` (`dependencies`, the README rewrite for PyPI) | spec `001` (ADR-1 and the packaging decisions) |
 | `src/tlsvigil/certificate.py` | spec `002` (ADR-2 on the explicit context, ADR-3 on the reasons) |
+| `src/tlsvigil/rdap.py` | spec `003` (ADR-2 on `http.client`, ADR-3 on the deadline, ADR-4 on the size caps, ADR-5 on redirects) |
 | `tests/conftest.py`, `tests/network_guard.py`, `tests/tls_server.py` | spec `002` (ADR-4, ADR-5 and deviation 7 on `::1`) |
+| `tests/http_server.py`, `tests/data/rdap/` | spec `003` (ADR-7 and deviation 3 on the routes) |
 | `README.md` or `README.pt-BR.md` | the two READMEs rule below and `tests/test_readme_pt_br.py` |
 | `.github/workflows/` | the comments at the top of each workflow; the ruleset requires the `Quality` checks by name |
 
