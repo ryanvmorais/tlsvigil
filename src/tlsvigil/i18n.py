@@ -471,6 +471,51 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
             "separados por vírgulas"
         ),
     },
+    # The state file (spec 005, RF-07; ADR-2): why it was read as empty, so the run counts as
+    # the first; and why it could not be written, so the next run repeats a message.
+    "state.unreadable": {
+        Lang.EN: "The state file {path} cannot be read; this run counts as the first.",
+        Lang.PT_BR: (
+            "O arquivo de estado {path} não pode ser lido; " "esta execução conta como a primeira."
+        ),
+    },
+    "state.too_large": {
+        Lang.EN: (
+            "The state file {path} is larger than {limit} KiB; this run counts as the first."
+        ),
+        Lang.PT_BR: (
+            "O arquivo de estado {path} passa de {limit} KiB; esta execução conta como a primeira."
+        ),
+    },
+    "state.not_utf8": {
+        Lang.EN: "The state file {path} is not UTF-8; this run counts as the first.",
+        Lang.PT_BR: (
+            "O arquivo de estado {path} não está em UTF-8; " "esta execução conta como a primeira."
+        ),
+    },
+    "state.invalid": {
+        Lang.EN: "The state file {path} is not valid; this run counts as the first.",
+        Lang.PT_BR: "O arquivo de estado {path} não é válido; esta execução conta como a primeira.",
+    },
+    "state.version": {
+        Lang.EN: (
+            "The state file {path} was written by another version of TLSVigil; "
+            "this run counts as the first."
+        ),
+        Lang.PT_BR: (
+            "O arquivo de estado {path} foi gravado por outra versão do TLSVigil; "
+            "esta execução conta como a primeira."
+        ),
+    },
+    "state.unwritable": {
+        Lang.EN: (
+            "The state file {path} cannot be written; the next run may repeat a notification."
+        ),
+        Lang.PT_BR: (
+            "O arquivo de estado {path} não pode ser gravado; "
+            "a próxima execução pode repetir uma notificação."
+        ),
+    },
     # The command (RF-02, RF-03; ADR-3): the headings of a configuration error, the hint of a
     # missing default file, and the line before the traceback of a bug.
     "cli.file_heading": {
