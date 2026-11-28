@@ -75,6 +75,10 @@ dev = [
     # intermediates and leaves; cryptography for the cases trustme has no option for.
     "trustme>=1.2.1",
     "cryptography>=50.0.2",
+    # action.yml and the template's workflow, read by the tests only (spec 006, ADR-6); the
+    # package itself stays without dependencies.
+    "pyyaml>=6.0.4",
+    "types-pyyaml>=6.0.12.20261113",
 ]
 
 # --- Packaging (Hatchling) ---------------------------------------------------

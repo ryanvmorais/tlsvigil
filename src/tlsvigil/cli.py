@@ -38,7 +38,7 @@ from tlsvigil.config import (
 )
 from tlsvigil.delivery import Delivery, DeliveryOutcome
 from tlsvigil.environment import ChannelSettings, Redactor, read_settings
-from tlsvigil.i18n import Lang, translate
+from tlsvigil.i18n import Lang, parse_lang, translate
 from tlsvigil.notify import notify
 from tlsvigil.output import printable, render_json, render_text
 from tlsvigil.runner import run
@@ -69,9 +69,6 @@ EXIT_INTERNAL: Final = 3
 # With --notify, a delivery failed, whatever the checks found (spec 005, RF-12).
 EXIT_DELIVERY: Final = 4
 
-# The spellings `--lang` accepts, in any case (RF-08).
-_LANGS: Final = {lang.lower(): lang for lang in Lang}
-
 # ---------------------------------------------------------------------------
 # Parser
 # ---------------------------------------------------------------------------
@@ -90,12 +87,10 @@ def _lang(text: str) -> Lang:
     Raises:
         argparse.ArgumentTypeError: For any other value; argparse then exits ``2``.
     """
-    try:
-        return _LANGS[text.lower()]
-    except KeyError:
-        raise argparse.ArgumentTypeError(
-            f"invalid language {text!r} (choose from 'en', 'pt-BR')"
-        ) from None
+    lang = parse_lang(text)
+    if lang is None:
+        raise argparse.ArgumentTypeError(f"invalid language {text!r} (choose from 'en', 'pt-BR')")
+    return lang
 
 
 def _parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
