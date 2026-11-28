@@ -1,12 +1,16 @@
 """
-Tests for the files of the GitHub Action (spec 006, RF-10, RF-12, RNF-01, RNF-02; ADR-2, ADR-6).
+Tests for the files of the GitHub Action and of its template (spec 006, RF-08 to RF-10, RF-12,
+RNF-01, RNF-02, RNF-06; ADR-2, ADR-6, ADR-7).
 
-``action.yml`` is read with :func:`yaml.safe_load` for its structure and as text for what the
-parser drops: the version comment after each pinned ``uses:``. The bootstrap of the Check step is
+``action.yml`` and the template's workflow are read with :func:`yaml.safe_load` for their structure
+and as text for what the parser drops: the version comment after each pinned ``uses:`` and the
+commented channel inputs. The template's ``tlsvigil.toml`` is loaded like any configuration, and
+its two READMEs are compared by shape. The bootstrap of the Check step is
 taken from the file itself and run in a subprocess, from a directory that holds a planted
 ``json.py``, so the test runs the very line a runner runs. Isolation: only the repository's files
 are read; the subprocess stops at the inputs, before any check, so nothing reaches the network.
-When the tests run from a tree without ``action.yml`` (an sdist), they are skipped.
+When the tests run from a tree without ``action.yml`` (an sdist, which has no ``template/``
+either), they are skipped.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from typing import Any, cast
 import pytest
 import yaml
 
-from tlsvigil.action import INPUT_PREFIX, INPUTS, input_variable
+from tlsvigil.action import CHANNEL_INPUTS, INPUT_PREFIX, INPUTS, input_variable
 from tlsvigil.config import Channel, load_config
 
 # ---------------------------------------------------------------------------
@@ -34,6 +38,8 @@ _ROOT = Path(__file__).resolve().parents[1]
 _ACTION = _ROOT / "action.yml"
 _SOURCE = _ROOT / "src"
 _DATA = Path(__file__).resolve().parent / "data" / "action"
+_TEMPLATE = _ROOT / "template"
+_WORKFLOW = _TEMPLATE / ".github" / "workflows" / "tlsvigil.yml"
 
 # Every test below reads action.yml, so the mark is shared.
 pytestmark = pytest.mark.skipif(
@@ -48,6 +54,19 @@ _USES = re.compile(r"^\s*(?:-\s+)?uses:")
 # The Actions the composite runs, in order; GitHub's own only (RNF-01).
 _RESTORE = "actions/cache/restore@"
 _SAVE = "actions/cache/save@"
+
+# This Action, as the template names it: until the first release it pins a commit of main, then
+# the commit of a release and its tag (ADR-7).
+_OWN = "ryanvmorais/tlsvigil"
+_SELF = re.compile(
+    r"^\s*(?:-\s+)?uses:\s+" + re.escape(_OWN) + r"@[0-9a-f]{40} # (?:main|v\d+(?:\.\d+)*)$"
+)
+
+# A commented channel input of the template: its name and the secret it reads.
+_OFFERED = re.compile(r"^\s*#\s+([a-z-]+): \$\{\{ secrets\.([A-Z_]+) \}\}$", re.MULTILINE)
+
+# An ATX heading; the run of "#" is its level.
+_HEADING = re.compile(r"^(#{1,6}) ")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -299,3 +318,161 @@ def test_the_telegram_configuration_turns_on_telegram_only() -> None:
     assert config.domains == ()
     assert config.notifications is not None
     assert config.notifications.channels == (Channel.TELEGRAM,)
+
+
+# ---------------------------------------------------------------------------
+# The template's workflow (RF-08, RF-09, RNF-06, RNF-07)
+# ---------------------------------------------------------------------------
+
+
+def _workflow() -> dict[Any, Any]:
+    """
+    Read the template's workflow.
+
+    Returns:
+        dict[Any, Any]: The parsed file; YAML 1.1 reads the key ``on`` as ``True``, so the keys
+            are not all strings.
+    """
+    return cast(dict[Any, Any], yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8")))
+
+
+def _triggers() -> dict[str, Any]:
+    """
+    Give the triggers of the template's workflow.
+
+    Returns:
+        dict[str, Any]: The ``on:`` mapping, by event name.
+    """
+    workflow = _workflow()
+    return cast(dict[str, Any], workflow.get("on", workflow.get(True)))
+
+
+def _template_steps() -> list[dict[str, Any]]:
+    """
+    Give the steps of the template's one job.
+
+    Returns:
+        list[dict[str, Any]]: The steps, in order.
+    """
+    jobs = _workflow()["jobs"]
+    assert list(jobs) == ["check"]
+    return cast(list[dict[str, Any]], jobs["check"]["steps"])
+
+
+def test_every_uses_of_the_template_is_pinned_to_a_full_sha() -> None:
+    lines = [
+        line for line in _WORKFLOW.read_text(encoding="utf-8").splitlines() if _USES.match(line)
+    ]
+    # Positive control: the checkout and the Action are both found, so the check ran on them.
+    assert len(lines) == 2
+    assert [line for line in lines if not (_PINNED.match(line) or _SELF.match(line))] == []
+
+
+def test_the_template_checks_out_without_credentials_and_runs_this_action() -> None:
+    steps = _template_steps()
+    assert [str(step["uses"]).split("@")[0] for step in steps] == ["actions/checkout", _OWN]
+    assert steps[0]["with"] == {"persist-credentials": False}
+    assert all(str(step.get("name", "")).strip() for step in steps)
+    assert [step for step in steps if "run" in step] == []
+
+
+def test_the_template_runs_daily_by_hand_and_on_a_change_of_the_configuration() -> None:
+    triggers = _triggers()
+    assert set(triggers) == {"schedule", "workflow_dispatch", "push"}
+    assert triggers["push"] == {"branches": ["main"], "paths": ["tlsvigil.toml"]}
+    crons = [str(entry["cron"]) for entry in triggers["schedule"]]
+    assert len(crons) == 1
+    minute, hour, *days = crons[0].split()
+    # Once a day, at a minute off the top of the hour, when the scheduler is busiest.
+    assert minute.isdigit() and int(minute) != 0 and hour.isdigit()
+    assert days == ["*", "*", "*"]
+
+
+def test_the_template_never_runs_on_a_pull_request() -> None:
+    assert {"pull_request", "pull_request_target"} & set(_triggers()) == set()
+
+
+def test_the_template_asks_for_two_permissions_only() -> None:
+    assert _workflow()["permissions"] == {"contents": "read", "issues": "write"}
+    assert "permissions" not in _workflow()["jobs"]["check"]
+
+
+def test_the_template_queues_a_second_run_instead_of_cancelling() -> None:
+    assert _workflow()["concurrency"] == {"group": "tlsvigil", "cancel-in-progress": False}
+
+
+def test_the_template_job_has_a_timeout() -> None:
+    timeout = _workflow()["jobs"]["check"]["timeout-minutes"]
+    assert isinstance(timeout, int) and 0 < timeout <= 30
+
+
+def test_the_template_offers_every_channel_input_commented() -> None:
+    """The commented ``with:`` lists the channel inputs of ``action.yml``, in order."""
+    text = _WORKFLOW.read_text(encoding="utf-8")
+    offered = [(match.group(1), match.group(2)) for match in _OFFERED.finditer(text)]
+    # Each secret is named after the variable the input becomes (spec 005, RF-03), the default
+    # token excepted: the Action passes the workflow's own.
+    expected = [
+        (name, variable) for name, variable in CHANNEL_INPUTS.items() if name != "github-token"
+    ]
+    assert offered == expected
+    assert {name for name, _ in expected} <= set(_action()["inputs"])
+
+
+# ---------------------------------------------------------------------------
+# The template's configuration and READMEs (RF-08)
+# ---------------------------------------------------------------------------
+
+
+def _headings(path: Path) -> list[int]:
+    """
+    List the heading levels of a Markdown file, outside fenced code blocks.
+
+    Args:
+        path (Path): The Markdown file.
+
+    Returns:
+        list[int]: One level (1 to 6) per heading, in order.
+    """
+    levels: list[int] = []
+    fenced = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and (match := _HEADING.match(line)):
+            levels.append(len(match.group(1)))
+    return levels
+
+
+def _table_lines(path: Path) -> int:
+    """
+    Count the table lines of a Markdown file.
+
+    Args:
+        path (Path): The Markdown file.
+
+    Returns:
+        int: The lines that start with ``|``, header and separator included.
+    """
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("|"))
+
+
+def test_the_template_configuration_loads_with_the_github_channel() -> None:
+    config = load_config(_TEMPLATE / "tlsvigil.toml")
+    assert [(entry.host, entry.port) for entry in config.hosts] == [("example.com", 443)]
+    assert [entry.domain for entry in config.domains] == ["example.com"]
+    assert config.notifications is not None
+    assert config.notifications.channels == (Channel.GITHUB,)
+
+
+def test_both_template_readmes_have_the_same_headings() -> None:
+    english = _headings(_TEMPLATE / "README.md")
+    # Positive control: the title and the four sections are found.
+    assert len(english) == 5
+    assert _headings(_TEMPLATE / "README.pt-BR.md") == english
+
+
+def test_both_template_readmes_have_the_same_table() -> None:
+    english = _table_lines(_TEMPLATE / "README.md")
+    assert english > 2
+    assert _table_lines(_TEMPLATE / "README.pt-BR.md") == english

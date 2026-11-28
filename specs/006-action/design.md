@@ -479,6 +479,16 @@ notes.
    and the catalogue's sentence, which names the input and never holds its value, so each
    problem is also an annotation of the run.
 
+6. **Dependabot reads `/template/.github/workflows`, and leaves this repository's own pin alone**
+   (RF-08): outside `/`, Dependabot looks for workflows in the directory it is given, not in its
+   `.github/workflows`, so the entry names that folder instead of `/template`; and it ignores
+   `ryanvmorais/tlsvigil`, whose pin in the template a release moves by hand to its own commit and
+   tag, so no weekly pull request bumps it to the head of `main`. The template's own
+   `dependabot.yml` keeps `directory: "/"`, where the workflow sits in `.github/workflows`.
+7. **The template's steps have names** (RF-09): "Check out the configuration" and "Run TLSVigil",
+   which the page of a run shows in place of the `uses:` line; the rest of the workflow is the one
+   of "Interfaces".
+
 ## Implementation notes
 
 **Stage 0.** `read_inputs()`, `channel_environment()` and `step_result()` in `action.py`, 48 tests
@@ -508,3 +518,14 @@ the `run:` (1), the input `smtp-to` removed (3), the save without `always()` (1)
 from the bootstrap (1). Gate: 1518 tests, 99% coverage. On the pull request, the "Action" job
 went red on the three runners with one expected exit code changed, only that run differing, and
 the cache restore of the fifth run missed; then green with the right value.
+
+**Stage 3.** `template/` with `tlsvigil.toml`, the workflow pinned to the merge of Stage 2
+(`3a6171c`, `# main`), `dependabot.yml` and the two READMEs; 11 more tests in
+`tests/test_action_files.py`, among them the commented channel inputs held to
+`action.CHANNEL_INPUTS`, each reading the secret named after its variable; the rule on personal
+tools of `tests/test_impersonality.py` reaches `template/`. Each guard was seen failing once, then
+restored: a `pull_request` trigger (2 tests red), `cancel-in-progress: true` (1), `contents: write`
+(1), a tag in place of the checkout's SHA (1), the `smtp-to` line removed (1), the timeout removed
+(1), a key the configuration does not know (1), a heading missing from the Portuguese README (1), a
+table row missing from it (1), a personal command in the English README (1). Gate: 1529 tests, 99%
+coverage.

@@ -1,0 +1,13 @@
+# Dependabot version updates — read by GitHub, no workflow of its own.
+# Opens a pull request when a new release of TLSVigil or of actions/checkout is out, so the
+# commit SHAs pinned in .github/workflows/tlsvigil.yml stay current.
+# Cooldown: a release waits 7 days before it is proposed, so one that breaks on its first day
+# never becomes a pull request; security updates ignore the cooldown.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7

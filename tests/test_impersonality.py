@@ -3,7 +3,7 @@ Tests that what is versioned speaks to whoever cloned the repository, not to one
 
 Two rules are guarded. The maintainer's first name appears only where authorship says it (the
 license and the package metadata), and the files written for an AI assistant (``CLAUDE.md`` and
-``.claude/``) describe the project and do not point at tools only one machine has.
+``.claude/``) and the template's files (``template/``) do not point at tools only one machine has.
 
 Isolation: the tests ask ``git ls-files`` which files are versioned and read them as text, so
 nothing is created and nothing is written. When ``git`` is missing or the tests run from a source
@@ -44,6 +44,10 @@ _PERSONAL_TOOLS = re.compile(
     r"nova-interface|stack|novo-projeto|preparar-release|qualidade|limpar-branches|"
     r"enxugar-memoria|auditoria-[a-z]+|atualizar-[a-z]+)(?![\w/.-])|~/\.claude"
 )
+
+# The folders held to the rule on personal tools, besides CLAUDE.md: the assistant's own files and
+# the template, which other repositories copy.
+_SCOPED = (".claude/", "template/")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -105,13 +109,19 @@ def test_the_name_of_the_maintainer_is_only_in_authorship() -> None:
     assert found == []
 
 
-def test_assistant_files_do_not_point_at_personal_tools() -> None:
-    """``CLAUDE.md`` and ``.claude/`` name no personal skill and no personal configuration."""
-    names = [n for n in _versioned_files() if n == "CLAUDE.md" or n.startswith(".claude/")]
+def test_assistant_files_and_the_template_do_not_point_at_personal_tools() -> None:
+    """
+    ``CLAUDE.md``, ``.claude/`` and ``template/`` name no personal skill and no personal folder.
+
+    ``template/`` is copied whole into the template repository, and from there into every
+    repository made from it, so what it says reaches people who never cloned this one.
+    """
+    names = [n for n in _versioned_files() if n == "CLAUDE.md" or n.startswith(_SCOPED)]
     found = [
         n for n in names if (text := _read_text(n)) is not None and _PERSONAL_TOOLS.search(text)
     ]
 
-    # Guards the check against an empty selection: the hooks are always versioned.
-    assert names
+    # Guards the check against an empty selection: the hooks and the template are versioned.
+    assert any(n.startswith(".claude/") for n in names)
+    assert any(n.startswith("template/") for n in names)
     assert found == []

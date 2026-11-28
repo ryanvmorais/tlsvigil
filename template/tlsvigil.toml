@@ -1,0 +1,38 @@
+# What TLSVigil checks in this repository: replace example.com with your hosts and domains.
+# Read by the workflow in .github/workflows/tlsvigil.yml; committing a change here runs a check.
+# Every key: https://github.com/ryanvmorais/tlsvigil#configuration
+
+# "en" or "pt-BR": the language of the issue, the messages and the run's summary.
+lang = "en"
+# Seconds for each TLS connection and each RDAP request (default 10).
+# timeout = 10
+
+[certificates]
+# Warn when fewer days than this are left (default 14).
+# warn_days = 14
+hosts = [
+  "example.com",                                  # port 443
+  # "mail.example.com:465",
+  # "[2001:db8::1]:8443",
+  # { host = "legacy.example.com", warn_days = 30 },
+]
+
+[domains]
+# Warn when fewer days than this are left (default 30).
+# warn_days = 30
+names = [
+  "example.com",
+  # { name = "example.com.br", warn_days = 60 },
+]
+
+[notifications]
+# Where the result goes, in this order: "github" (an issue in this repository), "telegram",
+# "smtp". Telegram and SMTP also need the secrets and the inputs of the workflow.
+channels = ["github"]
+
+# Read only when "smtp" is in channels; the user name, the password and the addresses come from
+# the workflow's inputs, never from this file.
+# [notifications.smtp]
+# host = "smtp.example.com"
+# port = 587                                      # default: 587 for "starttls", 465 for "tls"
+# security = "starttls"
