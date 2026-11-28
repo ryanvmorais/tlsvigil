@@ -7,6 +7,10 @@ takes the ``--host`` and ``--domain`` flags; both give one validated :class:`Con
 (RF-05). A rule of a host or a domain is never written here: the configuration calls the
 validators of the checks and maps the code of their exception to a sentence (ADR-2).
 
+The ``[notifications]`` table names the channels and the SMTP server (spec 005, RF-02). What is
+secret or personal comes from the environment instead (:mod:`tlsvigil.environment`), so a key that
+looks like one is a problem that names the variable to use, never repeating the value.
+
 A :class:`Problem` holds a key of the language catalogue, not a sentence, so the command writes it
 in the language of the run. The values it repeats are the text of the file, unescaped; the output
 escapes them (ADR-4).
@@ -20,6 +24,7 @@ import re
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
@@ -31,13 +36,18 @@ __all__ = [
     "DEFAULT_CERTIFICATE_WARN_DAYS",
     "DEFAULT_CONFIG",
     "DEFAULT_DOMAIN_WARN_DAYS",
+    "DEFAULT_SMTP_PORTS",
     "DEFAULT_TIMEOUT",
     "MAX_CONFIG_BYTES",
+    "Channel",
     "Config",
     "ConfigError",
     "DomainEntry",
     "HostEntry",
+    "Notifications",
     "Problem",
+    "SmtpSecurity",
+    "SmtpServer",
     "config_from_names",
     "load_config",
     "toml_position",
@@ -64,11 +74,35 @@ DEFAULT_DOMAIN_WARN_DAYS: Final = 30
 _DEFAULT_PORT: Final = 443
 # The keys each table may hold (RF-04); anything else is a problem, so a typo is never ignored
 # in silence (requirements, resolved decision 5).
-_TOP_KEYS: Final = frozenset({"lang", "timeout", "certificates", "domains"})
+_TOP_KEYS: Final = frozenset({"lang", "timeout", "certificates", "domains", "notifications"})
 _CERTIFICATE_KEYS: Final = frozenset({"warn_days", "hosts"})
 _DOMAIN_KEYS: Final = frozenset({"warn_days", "names"})
 _HOST_ENTRY_KEYS: Final = frozenset({"host", "port", "warn_days"})
 _DOMAIN_ENTRY_KEYS: Final = frozenset({"name", "warn_days"})
+_NOTIFICATION_KEYS: Final = frozenset({"channels", "smtp"})
+_SMTP_KEYS: Final = frozenset({"host", "port", "security"})
+# The keys a person may write to put a secret or an address in the file, each with the variables
+# that hold it instead (spec 005, RF-02, RF-03), in [notifications] and in [notifications.smtp]
+# alike: RF-02 says anywhere in the table. The names are those of tlsvigil.environment (ADR-10);
+# tests/test_environment.py checks that each one is read there.
+_SECRET_KEYS: Final[Mapping[str, tuple[str, ...]]] = {
+    "token": ("GITHUB_TOKEN", "TLSVIGIL_TELEGRAM_TOKEN"),
+    "chat_id": ("TLSVIGIL_TELEGRAM_CHAT_ID",),
+    "chat": ("TLSVIGIL_TELEGRAM_CHAT_ID",),
+    "username": ("TLSVIGIL_SMTP_USERNAME",),
+    "user": ("TLSVIGIL_SMTP_USERNAME",),
+    "password": ("TLSVIGIL_SMTP_PASSWORD",),
+    "from": ("TLSVIGIL_SMTP_FROM",),
+    "sender": ("TLSVIGIL_SMTP_FROM",),
+    "to": ("TLSVIGIL_SMTP_TO",),
+    "recipients": ("TLSVIGIL_SMTP_TO",),
+}
+# A [notifications.github] or [notifications.telegram] table is where a person would put a
+# token; written as anything other than a table, the key is just unknown.
+_SECRET_TABLES: Final[Mapping[str, tuple[str, ...]]] = {
+    "github": ("GITHUB_TOKEN", "GITHUB_REPOSITORY"),
+    "telegram": ("TLSVIGIL_TELEGRAM_TOKEN", "TLSVIGIL_TELEGRAM_CHAT_ID"),
+}
 # ASCII digits only, at most five: int() would also take "٤٤٣", "+443" and a 5000-digit string.
 _PORT_TEXT: Final = re.compile(r"[0-9]{1,5}")
 # The suffix tomllib gives every syntax error before Python 3.14 (and still gives after).
@@ -78,6 +112,74 @@ _TOML_SUFFIX: Final = re.compile(r" \(at (?:line (\d+), column (\d+)|end of docu
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
+
+
+class Channel(StrEnum):
+    """
+    A way to tell someone about a warning (spec 005, RF-02).
+
+    Attributes:
+        GITHUB (str): One issue in the repository the workflow runs in.
+        TELEGRAM (str): A message from a bot to a chat.
+        SMTP (str): An e-mail through an SMTP server.
+    """
+
+    GITHUB = "github"
+    TELEGRAM = "telegram"
+    SMTP = "smtp"
+
+
+class SmtpSecurity(StrEnum):
+    """
+    How the connection to the SMTP server becomes TLS, with no plain-text mode (spec 005, RF-10).
+
+    Attributes:
+        STARTTLS (str): A plain connection upgraded by ``STARTTLS``, the default.
+        TLS (str): TLS from the first byte.
+    """
+
+    STARTTLS = "starttls"
+    TLS = "tls"
+
+
+# The submission ports of RFC 6409 and RFC 8314, one for each way to reach TLS.
+DEFAULT_SMTP_PORTS: Final[Mapping[SmtpSecurity, int]] = {
+    SmtpSecurity.STARTTLS: 587,
+    SmtpSecurity.TLS: 465,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class SmtpServer:
+    """
+    The server of the ``smtp`` channel; who signs in and who gets the e-mail come from the
+    environment (spec 005, RF-03).
+
+    Attributes:
+        host (str): A name or an address that :func:`~tlsvigil.certificate.validate_host` accepts.
+        port (int): The TCP port, by default the one of :data:`DEFAULT_SMTP_PORTS`.
+        security (SmtpSecurity): How the connection becomes TLS.
+    """
+
+    host: str
+    port: int
+    security: SmtpSecurity
+
+
+@dataclass(frozen=True, slots=True)
+class Notifications:
+    """
+    The ``[notifications]`` table (spec 005, RF-02).
+
+    Attributes:
+        channels (tuple[Channel, ...]): In the order of the file, none twice; empty when the table
+            lists none.
+        smtp (SmtpServer | None): The ``[notifications.smtp]`` table, kept even when ``smtp`` is
+            not listed, so a channel is turned off by removing it from the list.
+    """
+
+    channels: tuple[Channel, ...]
+    smtp: SmtpServer | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,12 +222,15 @@ class Config:
         timeout (float): Seconds for each TLS connection and each RDAP request.
         hosts (tuple[HostEntry, ...]): In the order of the file or of the flags.
         domains (tuple[DomainEntry, ...]): In the order of the file or of the flags.
+        notifications (Notifications | None): The ``[notifications]`` table, ``None`` when the
+            file has none or the names come from the flags (spec 005).
     """
 
     lang: Lang | None
     timeout: float
     hosts: tuple[HostEntry, ...]
     domains: tuple[DomainEntry, ...]
+    notifications: Notifications | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +424,7 @@ def validate(document: Mapping[str, object]) -> Config:
     timeout = DEFAULT_TIMEOUT
     hosts: list[HostEntry] = []
     domains: list[DomainEntry] = []
+    notifications: Notifications | None = None
     listed = 0
 
     for key, value in document.items():
@@ -336,8 +442,10 @@ def validate(document: Mapping[str, object]) -> Config:
                 timeout = seconds
         elif key == "certificates":
             listed += _certificates(value, found, hosts)
-        else:
+        elif key == "domains":
             listed += _domains(value, found, domains)
+        else:
+            notifications = _notifications(value, found)
 
     # Counted as written, valid or not (a table or a list of the wrong type counts as one): a
     # file whose only entry is wrong has that problem, and "nothing to check" would only add
@@ -346,7 +454,7 @@ def validate(document: Mapping[str, object]) -> Config:
         found.add("", "config.nothing_to_check")
     if found.problems:
         raise ConfigError(found.problems, lang)
-    return Config(lang, timeout, tuple(hosts), tuple(domains))
+    return Config(lang, timeout, tuple(hosts), tuple(domains), notifications)
 
 
 def config_from_names(hosts: Sequence[str], domains: Sequence[str]) -> Config:
@@ -382,7 +490,7 @@ def config_from_names(hosts: Sequence[str], domains: Sequence[str]) -> Config:
         found.add("", "config.nothing_to_check")
     if found.problems:
         raise ConfigError(found.problems)
-    return Config(None, DEFAULT_TIMEOUT, tuple(host_entries), tuple(domain_entries))
+    return Config(None, DEFAULT_TIMEOUT, tuple(host_entries), tuple(domain_entries), None)
 
 
 # ---------------------------------------------------------------------------
@@ -532,6 +640,149 @@ def _domains(value: object, found: _Collector, domains: list[DomainEntry]) -> in
                 if domain is not None:
                     domains.append(domain)
     return listed
+
+
+def _notifications(value: object, found: _Collector) -> Notifications | None:
+    """
+    Walk the ``[notifications]`` table (spec 005, RF-02).
+
+    A channel listed without what it needs in the file (``smtp`` without its table) is a problem;
+    a table whose channel is not listed is kept, so removing a name from ``channels`` is enough to
+    turn a channel off.
+
+    Args:
+        value (object): The value of the key.
+        found (_Collector): Where problems go.
+
+    Returns:
+        Notifications | None: The table, or ``None`` when it is not a table; meaningful only when
+        no problem was found.
+    """
+    if not isinstance(value, dict):
+        found.add("notifications", "config.not_a_table")
+        return None
+    channels: tuple[Channel, ...] = ()
+    smtp: SmtpServer | None = None
+    smtp_written = False
+    for key, item in value.items():
+        place = f"notifications.{key}"
+        if key not in _NOTIFICATION_KEYS:
+            _unknown_key("notifications", key, item, found)
+        elif key == "channels":
+            channels = _channels(item, place, found)
+        else:
+            smtp_written = True
+            smtp = _smtp_server(item, place, found)
+    if Channel.SMTP in channels and not smtp_written:
+        found.add("notifications.smtp", "config.smtp_table")
+    return Notifications(channels, smtp)
+
+
+def _channels(value: object, place: str, found: _Collector) -> tuple[Channel, ...]:
+    """
+    Read ``channels``: a list of known channels, none twice.
+
+    Args:
+        value (object): The value of the key.
+        place (str): ``notifications.channels``.
+        found (_Collector): Where problems go.
+
+    Returns:
+        tuple[Channel, ...]: The valid channels, in order.
+    """
+    if not isinstance(value, list):
+        found.add(place, "config.not_a_list")
+        return ()
+    channels: list[Channel] = []
+    seen: dict[Channel, str] = {}
+    for index, item in enumerate(value, start=1):
+        where = f"{place}[{index}]"
+        # Exact values only, as in the documentation: "GitHub" is a typo, not a channel.
+        channel = next((member for member in Channel if member.value == item), None)
+        if type(item) is not str or channel is None:
+            found.add(where, "config.channel")
+            continue
+        first = seen.setdefault(channel, where)
+        if first != where:
+            found.add(where, "config.duplicate_channel", first=first)
+            continue
+        channels.append(channel)
+    return tuple(channels)
+
+
+def _smtp_server(value: object, place: str, found: _Collector) -> SmtpServer | None:
+    """
+    Read the ``[notifications.smtp]`` table: the server only, never who signs in (RF-03).
+
+    Args:
+        value (object): The value of the key.
+        place (str): ``notifications.smtp``.
+        found (_Collector): Where problems go.
+
+    Returns:
+        SmtpServer | None: The server, or ``None`` after recording its problems.
+    """
+    if not isinstance(value, dict):
+        found.add(place, "config.not_a_table")
+        return None
+    valid = True
+    for key, item in value.items():
+        if key not in _SMTP_KEYS:
+            _unknown_key(place, key, item, found)
+            valid = False
+
+    security: SmtpSecurity | None = SmtpSecurity.STARTTLS
+    if "security" in value:
+        written = value["security"]
+        security = next((member for member in SmtpSecurity if member.value == written), None)
+        if type(written) is not str or security is None:
+            found.add(f"{place}.security", "config.smtp_security")
+
+    port = value.get("port", DEFAULT_SMTP_PORTS[security or SmtpSecurity.STARTTLS])
+    # A bool is an int to Python, and TOML has no other way to write a port.
+    port_ok = type(port) is int and 1 <= port <= 65535
+    if not port_ok:
+        found.add(f"{place}.port", f"host.{HostProblem.PORT}")
+
+    if "host" not in value:
+        found.add(place, "config.missing_key", key="host")
+        return None
+    host = value["host"]
+    if type(host) is not str:
+        found.add(f"{place}.host", "config.not_a_string")
+        return None
+    try:
+        # The port was judged above; a valid stand-in keeps only the rules of the host here.
+        validate_host(host, port if port_ok else _DEFAULT_PORT)
+    except InvalidHost as error:
+        found.add(f"{place}.host", f"host.{error.code}")
+        return None
+    if not valid or not port_ok or security is None:
+        return None
+    return SmtpServer(host, port, security)
+
+
+def _unknown_key(table: str, key: str, value: object, found: _Collector) -> None:
+    """
+    Record an unknown key of a notifications table, as a secret one when it looks like one.
+
+    The problem of a secret-like key names the variables to use and never the value, which may be
+    a real token (RF-02).
+
+    Args:
+        table (str): ``notifications`` or ``notifications.smtp``.
+        key (str): The key as written.
+        value (object): Its value, only to tell a table from anything else.
+        found (_Collector): Where the problem goes.
+    """
+    place = f"{table}.{key}"
+    variables = _SECRET_KEYS.get(key)
+    if variables is None and table == "notifications" and isinstance(value, dict):
+        variables = _SECRET_TABLES.get(key)
+    if variables is None:
+        found.add(place, "config.unknown_key")
+    else:
+        found.add(place, "config.secret_key", variables=", ".join(variables))
 
 
 # ---------------------------------------------------------------------------

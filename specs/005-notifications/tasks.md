@@ -46,39 +46,39 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 1 — The configuration and the environment
 
-- [ ] `src/tlsvigil/config.py`: `Channel`, `SmtpSecurity`, `DEFAULT_SMTP_PORTS`, `SmtpServer`,
+- [x] `src/tlsvigil/config.py`: `Channel`, `SmtpSecurity`, `DEFAULT_SMTP_PORTS`, `SmtpServer`,
   `Notifications`, `Config.notifications`; `notifications` among the top-level keys; `channels`
   (a list of known, distinct values), the `smtp` table (`host` through `validate_host`, `port`
   `1` to `65535` with its default by `security`, `security` with its default), `"smtp"` listed
   without the table as a problem; `config_from_names` with `notifications=None`. — RF-02
-- [ ] `src/tlsvigil/config.py`: the secret-like keys of the design's table as the problem
+- [x] `src/tlsvigil/config.py`: the secret-like keys of the design's table as the problem
   `config.secret_key` with the variables to use, never the value. — RF-02, RF-03
-- [ ] `src/tlsvigil/environment.py`: `GitHubSettings`, `TelegramSettings`, `SmtpSettings`,
+- [x] `src/tlsvigil/environment.py`: `GitHubSettings`, `TelegramSettings`, `SmtpSettings`,
   `ChannelSettings` with `private_values()`, and `read_settings(notifications, environ)` reading
   only the variables of the channels listed, stripping whitespace, collecting every missing,
   empty or malformed variable as a `Problem` placed at its name with no value in it. — RF-03,
   ADR-10
-- [ ] `src/tlsvigil/environment.py`: `Redactor(values)`: each value and its percent-encoded form
+- [x] `src/tlsvigil/environment.py`: `Redactor(values)`: each value and its percent-encoded form
   replaced with `***`, longest first. — RNF-03, ADR-7
-- [ ] `src/tlsvigil/i18n.py`: the sentences of the new configuration problems (`config.secret_key`,
+- [x] `src/tlsvigil/i18n.py`: the sentences of the new configuration problems (`config.secret_key`,
   the `notifications.*` problems) and of `env.missing` and `env.invalid`, in both languages. —
   RF-02, RF-03
-- [ ] `tests/test_config.py`: the spec `004` test of a `[notifications]` table as an error becomes
+- [x] `tests/test_config.py`: the spec `004` test of a `[notifications]` table as an error becomes
   the tests of the table: each key with its default and its bounds, an unknown channel, a channel
   twice, `"smtp"` without its table, a table without its channel accepted, each secret-like key
   with its variable named and its value absent from the message, every problem reported together
   with those of the hosts. — RF-02, RF-14
-- [ ] `tests/test_environment.py`: each variable of each channel missing, empty, blank, and
+- [x] `tests/test_environment.py`: each variable of each channel missing, empty, blank, and
   malformed (a repository without `/`, a Telegram token without `:`, a chat with letters, an
   address with two `@`, with a display name, with a comma inside one address); the variables of a
   channel not listed never read, with the listed one read as a control; every problem at once; the
   value of a bad variable in no message; the Redactor on a URL that holds the token percent-encoded
   and on two values where one contains the other. — RF-03, RNF-03, RF-14
-- [ ] See the new tests fail once: one secret-like key left as `config.unknown_key`, the address
+- [x] See the new tests fail once: one secret-like key left as `config.unknown_key`, the address
   check accepting a comma, `read_settings` reading a channel not listed, the Redactor without the
   percent-encoded form, the values sorted shortest first; each goes red, then the change is undone.
   — RF-02, RF-03, RNF-03
-- [ ] Quality gate. —
+- [x] Quality gate. —
 
 ## Stage 2 — Findings, events and the state
 

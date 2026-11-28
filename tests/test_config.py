@@ -17,18 +17,23 @@ from tlsvigil import config as config_module
 from tlsvigil.config import (
     DEFAULT_CERTIFICATE_WARN_DAYS,
     DEFAULT_DOMAIN_WARN_DAYS,
+    DEFAULT_SMTP_PORTS,
     DEFAULT_TIMEOUT,
     MAX_CONFIG_BYTES,
+    Channel,
     Config,
     ConfigError,
     DomainEntry,
     HostEntry,
+    Notifications,
     Problem,
+    SmtpSecurity,
+    SmtpServer,
     config_from_names,
     load_config,
     toml_position,
 )
-from tlsvigil.i18n import MESSAGES, Lang
+from tlsvigil.i18n import MESSAGES, Lang, translate
 from tlsvigil.rdap import DomainProblem
 
 # The example of the design's "Interfaces", as a person would write it.
@@ -367,7 +372,7 @@ _HOST = 'certificates.hosts = ["example.com"]\n'
     [
         # Unknown keys, at each level.
         ("warn_day = 3\n" + _HOST, "warn_day", "config.unknown_key"),
-        (_HOST + "[notifications]\nissue = true\n", "notifications", "config.unknown_key"),
+        (_HOST + "[notifications]\nissue = true\n", "notifications.issue", "config.unknown_key"),
         (
             '[certificates]\nwarn_day = 3\nhosts = ["example.com"]\n',
             "certificates.warn_day",
@@ -596,6 +601,266 @@ def test_a_domain_and_a_host_of_the_same_name_are_not_duplicates(tmp_path: Path)
     text = 'certificates.hosts = ["example.com"]\ndomains.names = ["example.com"]\n'
     loaded = load_config(_write(tmp_path, text))
     assert (len(loaded.hosts), len(loaded.domains)) == (1, 1)
+
+
+# ---------------------------------------------------------------------------
+# The [notifications] table (spec 005, RF-02)
+# ---------------------------------------------------------------------------
+
+
+def _notifications(tmp_path: Path, table: str) -> Notifications | None:
+    """
+    Load a file with one host and the given notifications text.
+
+    Args:
+        tmp_path (Path): The test's directory.
+        table (str): TOML that follows the host, such as a ``[notifications]`` table.
+
+    Returns:
+        Notifications | None: The table that was loaded.
+    """
+    return load_config(_write(tmp_path, _HOST + table)).notifications
+
+
+def test_the_example_of_the_design_loads_every_channel(tmp_path: Path) -> None:
+    table = """\
+[notifications]
+channels = ["github", "telegram", "smtp"]
+
+[notifications.smtp]
+host = "smtp.example.com"
+port = 587
+security = "starttls"
+"""
+    assert _notifications(tmp_path, table) == Notifications(
+        (Channel.GITHUB, Channel.TELEGRAM, Channel.SMTP),
+        SmtpServer("smtp.example.com", 587, SmtpSecurity.STARTTLS),
+    )
+
+
+def test_a_file_without_the_table_has_no_notifications(tmp_path: Path) -> None:
+    assert _notifications(tmp_path, "") is None
+    assert config_from_names(["example.com"], []).notifications is None
+
+
+def test_the_channels_keep_the_order_of_the_file(tmp_path: Path) -> None:
+    table = '[notifications]\nchannels = ["telegram", "github"]\n'
+    assert _notifications(tmp_path, table) == Notifications(
+        (Channel.TELEGRAM, Channel.GITHUB), None
+    )
+
+
+@pytest.mark.parametrize("table", ["[notifications]\n", "[notifications]\nchannels = []\n"])
+def test_a_table_without_channels_is_accepted(tmp_path: Path, table: str) -> None:
+    """The file is valid; whether a run with no channel may notify is the command's to judge."""
+    assert _notifications(tmp_path, table) == Notifications((), None)
+
+
+@pytest.mark.parametrize(
+    ("smtp", "server"),
+    [
+        ('host = "smtp.example.com"', SmtpServer("smtp.example.com", 587, SmtpSecurity.STARTTLS)),
+        (
+            'host = "smtp.example.com"\nsecurity = "tls"',
+            SmtpServer("smtp.example.com", 465, SmtpSecurity.TLS),
+        ),
+        (
+            'host = "smtp.example.com"\nsecurity = "tls"\nport = 2465',
+            SmtpServer("smtp.example.com", 2465, SmtpSecurity.TLS),
+        ),
+        ('host = "192.0.2.25"\nport = 1', SmtpServer("192.0.2.25", 1, SmtpSecurity.STARTTLS)),
+        ('host = "::1"\nport = 65535', SmtpServer("::1", 65535, SmtpSecurity.STARTTLS)),
+    ],
+    ids=["defaults", "tls-default-port", "tls-own-port", "lowest-port", "highest-port"],
+)
+def test_the_smtp_table_and_its_defaults(tmp_path: Path, smtp: str, server: SmtpServer) -> None:
+    table = f'[notifications]\nchannels = ["smtp"]\n[notifications.smtp]\n{smtp}\n'
+    assert _notifications(tmp_path, table) == Notifications((Channel.SMTP,), server)
+    assert DEFAULT_SMTP_PORTS == {SmtpSecurity.STARTTLS: 587, SmtpSecurity.TLS: 465}
+
+
+def test_an_smtp_table_without_its_channel_is_kept(tmp_path: Path) -> None:
+    table = '[notifications]\nchannels = ["github"]\n[notifications.smtp]\nhost = "smtp.example"\n'
+    assert _notifications(tmp_path, table) == Notifications(
+        (Channel.GITHUB,), SmtpServer("smtp.example", 587, SmtpSecurity.STARTTLS)
+    )
+
+
+_SMTP = '[notifications]\nchannels = ["smtp"]\n[notifications.smtp]\nhost = "smtp.example.com"\n'
+
+
+@pytest.mark.parametrize(
+    ("table", "place", "key"),
+    [
+        ("notifications = 1\n", "notifications", "config.not_a_table"),
+        ('[notifications]\nchannels = "github"\n', "notifications.channels", "config.not_a_list"),
+        (
+            '[notifications]\nchannels = ["slack"]\n',
+            "notifications.channels[1]",
+            "config.channel",
+        ),
+        (
+            '[notifications]\nchannels = ["GitHub"]\n',
+            "notifications.channels[1]",
+            "config.channel",
+        ),
+        ("[notifications]\nchannels = [1]\n", "notifications.channels[1]", "config.channel"),
+        ('[notifications]\nchannels = ["smtp"]\n', "notifications.smtp", "config.smtp_table"),
+        (
+            '[notifications]\nchannels = ["smtp"]\nsmtp = "smtp.example.com"\n',
+            "notifications.smtp",
+            "config.not_a_table",
+        ),
+        (
+            '[notifications]\nchannels = ["smtp"]\n[notifications.smtp]\nport = 587\n',
+            "notifications.smtp",
+            "config.missing_key",
+        ),
+        (
+            "[notifications]\n[notifications.smtp]\nhost = 25\n",
+            "notifications.smtp.host",
+            "config.not_a_string",
+        ),
+        (
+            '[notifications]\n[notifications.smtp]\nhost = "smtp://smtp.example.com"\n',
+            "notifications.smtp.host",
+            "host.url_or_path",
+        ),
+        (
+            '[notifications]\n[notifications.smtp]\nhost = "smtp.example.com:587"\n',
+            "notifications.smtp.host",
+            "host.port_in_host",
+        ),
+        (_SMTP + "port = 0\n", "notifications.smtp.port", "host.port"),
+        (_SMTP + "port = 65536\n", "notifications.smtp.port", "host.port"),
+        (_SMTP + 'port = "587"\n', "notifications.smtp.port", "host.port"),
+        (_SMTP + "port = true\n", "notifications.smtp.port", "host.port"),
+        (_SMTP + 'security = "ssl"\n', "notifications.smtp.security", "config.smtp_security"),
+        (_SMTP + 'security = "TLS"\n', "notifications.smtp.security", "config.smtp_security"),
+        (_SMTP + "security = 1\n", "notifications.smtp.security", "config.smtp_security"),
+        (_SMTP + "tls = true\n", "notifications.smtp.tls", "config.unknown_key"),
+        (
+            '[notifications]\nchannels = ["github"]\ngithub = true\n',
+            "notifications.github",
+            "config.unknown_key",
+        ),
+    ],
+)
+def test_a_bad_notifications_table_names_the_place_and_the_problem(
+    tmp_path: Path, table: str, place: str, key: str
+) -> None:
+    assert _places(_refused(_write(tmp_path, _HOST + table))) == [(place, key)]
+
+
+def test_a_channel_listed_twice_names_the_first(tmp_path: Path) -> None:
+    table = '[notifications]\nchannels = ["github", "telegram", "github"]\n'
+    error = _refused(_write(tmp_path, _HOST + table))
+    assert error.problems == (
+        Problem(
+            "notifications.channels[3]",
+            "config.duplicate_channel",
+            {"first": "notifications.channels[1]"},
+        ),
+    )
+
+
+# A value no message may repeat: it stands for a real token or password.
+_SECRET = "ghp_DoNotRepeatThisValue1234"
+
+
+@pytest.mark.parametrize(
+    ("table", "place", "variables"),
+    [
+        (
+            f'[notifications]\ntoken = "{_SECRET}"\n',
+            "notifications.token",
+            "GITHUB_TOKEN, TLSVIGIL_TELEGRAM_TOKEN",
+        ),
+        (
+            f'[notifications.github]\ntoken = "{_SECRET}"\n',
+            "notifications.github",
+            "GITHUB_TOKEN, GITHUB_REPOSITORY",
+        ),
+        (
+            f'[notifications.telegram]\ntoken = "{_SECRET}"\n',
+            "notifications.telegram",
+            "TLSVIGIL_TELEGRAM_TOKEN, TLSVIGIL_TELEGRAM_CHAT_ID",
+        ),
+        (
+            f'[notifications]\nchat_id = "{_SECRET}"\n',
+            "notifications.chat_id",
+            "TLSVIGIL_TELEGRAM_CHAT_ID",
+        ),
+        (
+            f'[notifications]\nchat = "{_SECRET}"\n',
+            "notifications.chat",
+            "TLSVIGIL_TELEGRAM_CHAT_ID",
+        ),
+        (
+            f'{_SMTP}username = "{_SECRET}"\n',
+            "notifications.smtp.username",
+            "TLSVIGIL_SMTP_USERNAME",
+        ),
+        (f'{_SMTP}user = "{_SECRET}"\n', "notifications.smtp.user", "TLSVIGIL_SMTP_USERNAME"),
+        (
+            f'{_SMTP}password = "{_SECRET}"\n',
+            "notifications.smtp.password",
+            "TLSVIGIL_SMTP_PASSWORD",
+        ),
+        (f'{_SMTP}from = "{_SECRET}"\n', "notifications.smtp.from", "TLSVIGIL_SMTP_FROM"),
+        (f'{_SMTP}sender = "{_SECRET}"\n', "notifications.smtp.sender", "TLSVIGIL_SMTP_FROM"),
+        (f'{_SMTP}to = ["{_SECRET}"]\n', "notifications.smtp.to", "TLSVIGIL_SMTP_TO"),
+        (
+            f'{_SMTP}recipients = "{_SECRET}"\n',
+            "notifications.smtp.recipients",
+            "TLSVIGIL_SMTP_TO",
+        ),
+        # Anywhere in the table (RF-02): each key at the other level too.
+        (
+            f'[notifications]\npassword = "{_SECRET}"\n',
+            "notifications.password",
+            "TLSVIGIL_SMTP_PASSWORD",
+        ),
+        (
+            f'{_SMTP}token = "{_SECRET}"\n',
+            "notifications.smtp.token",
+            "GITHUB_TOKEN, TLSVIGIL_TELEGRAM_TOKEN",
+        ),
+    ],
+    ids=lambda value: value if isinstance(value, str) and "\n" not in value else None,
+)
+def test_a_secret_like_key_names_its_variables_and_never_its_value(
+    tmp_path: Path, table: str, place: str, variables: str
+) -> None:
+    error = _refused(_write(tmp_path, _HOST + table))
+    assert error.problems == (Problem(place, "config.secret_key", {"variables": variables}),)
+    for lang in Lang:
+        sentence = translate(lang, "config.secret_key", **error.problems[0].params)
+        assert variables in sentence
+        assert _SECRET not in sentence
+
+
+def test_the_problems_of_the_table_come_with_those_of_the_hosts_in_order(
+    tmp_path: Path,
+) -> None:
+    text = """\
+certificates.hosts = ["https://example.com"]
+[notifications]
+channels = ["github", "fax", "smtp"]
+password = "hunter2"
+[notifications.smtp]
+host = "smtp.example.com"
+port = 0
+[domains]
+names = ["com"]
+"""
+    assert _places(_refused(_write(tmp_path, text))) == [
+        ("certificates.hosts[1]", "host.url_or_path"),
+        ("notifications.channels[2]", "config.channel"),
+        ("notifications.password", "config.secret_key"),
+        ("notifications.smtp.port", "host.port"),
+        ("domains.names[1]", "domain.one_label"),
+    ]
 
 
 # ---------------------------------------------------------------------------

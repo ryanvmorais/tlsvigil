@@ -396,6 +396,81 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
         Lang.EN: "nothing to check: no host and no domain is listed",
         Lang.PT_BR: "nada a verificar: nenhum host e nenhum domínio listado",
     },
+    # The [notifications] table (spec 005, RF-02); a secret-like key names its variables only.
+    "config.channel": {
+        Lang.EN: 'the channel must be "github", "telegram" or "smtp"',
+        Lang.PT_BR: 'o canal deve ser "github", "telegram" ou "smtp"',
+    },
+    "config.duplicate_channel": {
+        Lang.EN: "this channel is already listed at {first}",
+        Lang.PT_BR: "este canal já está listado em {first}",
+    },
+    "config.smtp_table": {
+        Lang.EN: 'the "smtp" channel needs a [notifications.smtp] table with the server\'s host',
+        Lang.PT_BR: (
+            'o canal "smtp" precisa de uma tabela [notifications.smtp] com o host do servidor'
+        ),
+    },
+    "config.smtp_security": {
+        Lang.EN: 'security must be "starttls" or "tls"',
+        Lang.PT_BR: 'security deve ser "starttls" ou "tls"',
+    },
+    "config.secret_key": {
+        Lang.EN: (
+            "a secret or an address does not belong in the file; "
+            "put it in the environment instead: {variables}"
+        ),
+        Lang.PT_BR: ("segredo ou endereço não vai no arquivo; coloque-o no ambiente: {variables}"),
+    },
+    # The environment variables of the channels (spec 005, RF-03): the place is the variable's
+    # name, and no sentence repeats its value.
+    "env.missing": {
+        Lang.EN: "the environment variable is not set, or is empty",
+        Lang.PT_BR: "a variável de ambiente não está definida, ou está vazia",
+    },
+    "env.invalid.token": {
+        Lang.EN: "the token must not contain whitespace or control characters",
+        Lang.PT_BR: "o token não pode ter espaços nem caracteres de controle",
+    },
+    "env.invalid.repository": {
+        Lang.EN: "must be the repository written as owner/name",
+        Lang.PT_BR: "deve ser o repositório escrito como dono/nome",
+    },
+    "env.invalid.telegram_token": {
+        Lang.EN: "must be a Telegram bot token: digits, ':', then letters, digits, '_' or '-'",
+        Lang.PT_BR: (
+            "deve ser um token de bot do Telegram: dígitos, ':', depois letras, dígitos, '_' ou '-'"
+        ),
+    },
+    "env.invalid.chat_id": {
+        Lang.EN: (
+            "must be the number of a chat, possibly negative, "
+            "or '@' and a name of 5 to 32 letters, digits or '_'"
+        ),
+        Lang.PT_BR: (
+            "deve ser o número de um chat, talvez negativo, "
+            "ou '@' e um nome de 5 a 32 letras, dígitos ou '_'"
+        ),
+    },
+    "env.invalid.text": {
+        Lang.EN: "must not contain control characters",
+        Lang.PT_BR: "não pode ter caracteres de controle",
+    },
+    "env.invalid.address": {
+        Lang.EN: "must be one e-mail address written as name@domain, without a display name",
+        Lang.PT_BR: (
+            "deve ser um endereço de e-mail escrito como nome@domínio, sem nome de exibição"
+        ),
+    },
+    "env.invalid.addresses": {
+        Lang.EN: (
+            "must be one or more e-mail addresses written as name@domain, separated by commas"
+        ),
+        Lang.PT_BR: (
+            "deve ser um ou mais endereços de e-mail escritos como nome@domínio, "
+            "separados por vírgulas"
+        ),
+    },
     # The command (RF-02, RF-03; ADR-3): the headings of a configuration error, the hint of a
     # missing default file, and the line before the traceback of a bug.
     "cli.file_heading": {

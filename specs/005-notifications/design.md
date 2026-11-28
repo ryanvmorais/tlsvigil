@@ -695,6 +695,11 @@ which is what RF-10 guards.
    maps the status. An RDAP answer outside `2xx` that announces a body over the cap, or never
    sends its body, is now `too_large` or `timeout` instead of `not_found`, `rate_limited` or
    `http`; no test of spec `003` covered that case.
+3. **RF-02: the secret-like keys are refused at both levels of the table.** The table of "The
+   configuration" places each key in `notifications` or in `notifications.smtp`; RF-02 says
+   "anywhere in the table", so every key of that table is `config.secret_key` in both places
+   (`notifications.password`, `notifications.smtp.token`). `github` and `telegram` stay secret only
+   as tables; written as anything else they are `config.unknown_key`.
 
 ## Implementation notes
 
@@ -710,3 +715,20 @@ which is what RF-10 guards.
   not sent (2 red), and the caller's `Connection` winning over the fixed one (2 red); in the
   server, the handler not called (3 red), a handler giving a handler not raising (1 red), and the
   request body not read (3 red).
+- **Stage 1:** the problems of the table are `config.channel`, `config.duplicate_channel` (with
+  `first`), `config.smtp_table` and `config.smtp_security`; a bad port reuses `host.port`, a table
+  without `host` reuses `config.missing_key`, and `config.secret_key` carries `variables`, the
+  names joined with `, `. Channel names and `security` are matched exactly, in lowercase, as the
+  documentation writes them. A table without `channels` has none, and is valid (stage 5 refuses it
+  with `--notify`). `Config.notifications` defaults to `None`, so the constructors of spec `004`
+  keep working. The variables' problems are `env.missing` and `env.invalid.<form>`, one form per
+  rule of the table (`token`, `repository`, `telegram_token`, `chat_id`, `text`, `address`,
+  `addresses`), with no parameter. `read_settings` raises the `ConfigError` itself, without a
+  language, and a `ValueError` when `smtp` is listed without its server, which validation never
+  lets through. The `Redactor` compiles one alternation of every value and its
+  `quote(value, safe="")`, longest first, and ignores an empty value. Seen failing (each change
+  undone): the key `user` left as `config.unknown_key` (1 red), the address check accepting a
+  comma (1 red), `read_settings` reading `telegram` when not listed (4 red), the Redactor without
+  the percent-encoded form (2 red), the values sorted shortest first (1 red), `smtp` listed without
+  its table accepted (1 red), a channel twice accepted (1 red), and the port bound written `65536`
+  (1 red).

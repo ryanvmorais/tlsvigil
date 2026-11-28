@@ -70,6 +70,7 @@ src/tlsvigil/       # the package: __main__.py (python -m tlsvigil),
                     #   certificate.py (the verified TLS check, its result type and classify()),
                     #   rdap.py (the domain check: IANA bootstrap, RdapClient, its redirects)
                     #   https.py (request(): one bounded HTTPS exchange, any status, no redirect)
+                    #   environment.py (the channels' variables → settings; the Redactor)
 tests/              # pytest; the CLI is driven through main(argv), and the docs have tests too
   runs.py           # the clock, the leaves and the RDAP registry shared by the run tests
   reports.py        # hand-built reports for the output and CLI tests (no network)
@@ -102,6 +103,7 @@ renders the report. The specs to come add, in this order: the notifications with
 | `src/tlsvigil/https.py` | spec `005` (ADR-1) and spec `003` (ADR-3, ADR-4); the read loop never calls `settimeout` after the body ends |
 | `tests/conftest.py`, `tests/network_guard.py`, `tests/tls_server.py` | spec `002` (ADR-4, ADR-5 and deviation 7 on `::1`) |
 | `tests/http_server.py`, `tests/data/rdap/` | spec `003` (ADR-7 and deviation 3 on the routes); spec `005` (RF-14) for `POST`, `PATCH` and `Route.handled` |
+| `src/tlsvigil/environment.py` (a variable, a form, the Redactor) | spec `005` (RF-03, ADR-7, ADR-10); `config.py` names the same variables in its secret-like keys |
 | `src/tlsvigil/cli.py` (flags, exit codes, streams) | spec `004` (ADR-3 on exit `3`, ADR-7 on the test seams, deviation 5 on `--config` with `--host`) |
 | `src/tlsvigil/config.py` (keys, defaults, places) | spec `004` (ADR-2 on the validators' codes, ADR-6 on the size cap, ADR-8 on host forms); both READMEs show the keys |
 | `src/tlsvigil/output.py`, the JSON shape | spec `004` (ADR-4 on escaping outside text, ADR-5 on the JSON schema version) |
