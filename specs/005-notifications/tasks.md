@@ -82,35 +82,35 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 2 — Findings, events and the state
 
-- [ ] `src/tlsvigil/output.py`: `_host_name` becomes the public `display_name`, its callers
+- [x] `src/tlsvigil/output.py`: `_host_name` becomes the public `display_name`, its callers
   updated; the output is unchanged. — RF-11
-- [ ] `src/tlsvigil/alerts.py`: `REMINDER_DAYS`, `PAST_DUE`, `Finding`, `EventKind`, `Event`,
+- [x] `src/tlsvigil/alerts.py`: `REMINDER_DAYS`, `PAST_DUE`, `Finding`, `EventKind`, `Event`,
   `Plan`; `findings(report, error_runs)` with the answers of the design's first table and the
   lowest reminder reached; `plan(told, answers, order)` with the rows of the second table, events
   in the order of the configuration and removed entries last. — RF-04, RF-05, RF-06, ADR-8
-- [ ] `src/tlsvigil/state.py`: `STATE_VERSION`, `DEFAULT_STATE`, `MAX_STATE_BYTES`,
+- [x] `src/tlsvigil/state.py`: `STATE_VERSION`, `DEFAULT_STATE`, `MAX_STATE_BYTES`,
   `ChannelState`, `State`; `load_state(path)` reading bytes up to the cap, decoding UTF-8 and
   validating every key and type, giving the empty state and a catalogue key on any deviation;
   `save_state(path, state)` through a temporary file in the same directory, flushed and moved with
   `os.replace`; the reset of a channel no longer listed and of a GitHub part from another
   repository. — RF-07, ADR-2
-- [ ] `src/tlsvigil/i18n.py`: the `state.*` warnings in both languages. — RF-07
-- [ ] `tests/test_alerts.py`: every row of both tables; `error` once (held, with a told finding
+- [x] `src/tlsvigil/i18n.py`: the `state.*` warnings in both languages. — RF-07
+- [x] `tests/test_alerts.py`: every row of both tables; `error` once (held, with a told finding
   kept and with nothing told) and twice; a change of error kind that is not a change; `invalid`
   with another reason; a warning that starts at five days with no reminder for `7`; a jump from
   eight to two days that sends one reminder for `3`; a domain past its date at `PAST_DUE`; a
   reminder that goes up and then down again; a threshold of `0`; an entry removed from the
   configuration named in its event. — RF-04, RF-05, RF-06, RF-14
-- [ ] `tests/test_state.py`: the round trip; a missing file silent; a directory, a file without
+- [x] `tests/test_state.py`: the round trip; a missing file silent; a directory, a file without
   permission, invalid UTF-8, invalid JSON, an unknown version, a wrong type at each level and a
   file over the cap, each read as empty with its warning; `os.replace` made to fail leaving the old
   file whole; a channel no longer listed dropped; a GitHub part of another repository reset; no
   token, password, chat or address in a saved file. — RF-07, RNF-03, RF-14
-- [ ] See the new tests fail once: the reminder compared with `<` instead of `<=`, the hold of the
+- [x] See the new tests fail once: the reminder compared with `<` instead of `<=`, the hold of the
   first `error` removed, `REMOVED` events placed in configuration order, the cap compared with
   `>=`, the write done in place instead of through `os.replace`; each goes red, then the change is
   undone. — RF-04, RF-06, RF-07
-- [ ] Quality gate. —
+- [x] Quality gate. —
 
 ## Stage 3 — Messages and the GitHub issue
 
