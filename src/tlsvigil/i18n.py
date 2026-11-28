@@ -802,6 +802,11 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
         Lang.EN: "the input lang must be en or pt-BR, or be left empty",
         Lang.PT_BR: "a entrada lang deve ser en ou pt-BR, ou ficar vazia",
     },
+    # The last line of a summary over its cap (RF-06), inside its code block.
+    "action.summary_cut": {
+        Lang.EN: "[The summary was cut here; the whole output is in the log of the step.]",
+        Lang.PT_BR: "[O resumo foi cortado aqui; a saída inteira está no log do passo.]",
+    },
 }
 
 
