@@ -60,6 +60,7 @@ password) come from the CI's secret store, never from a file in the repository. 
 src/tlsvigil/       # the package: cli.py (argparse entry point), __main__.py (python -m tlsvigil),
                     #   certificate.py (the verified TLS check, its result type and classify()),
                     #   rdap.py (the domain check: IANA bootstrap, bounded HTTPS, RdapClient)
+                    #   i18n.py (the two languages: the catalogue, translate() and plural())
 tests/              # pytest; the CLI is driven through main(argv), and the docs have tests too
   conftest.py       # installs the network guard (autouse) and the CA and local-server fixtures
   network_guard.py  # resolve and connect on loopback only; anything else fails the test
