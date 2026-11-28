@@ -1,0 +1,46 @@
+# TLSVigil: checks the certificates and domains of tlsvigil.toml every day and keeps one issue of
+# this repository up to date with what needs attention. Run by GitHub Actions on the schedule, by
+# hand (Actions → TLSVigil → Run workflow) and on a push to main that changes tlsvigil.toml.
+# The run is red when a check could not be made or a notification was not delivered; a warning
+# alone is an issue, not a red run.
+name: TLSVigil
+
+on:
+  schedule:
+    - cron: "17 7 * * *" # every day at 07:17 UTC; GitHub may start it late
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [tlsvigil.toml]
+
+# contents: read to check out tlsvigil.toml; issues: write for the "github" channel only.
+permissions:
+  contents: read
+  issues: write
+
+# One check at a time: a second run waits for the first, so the saved state is never raced.
+concurrency:
+  group: tlsvigil
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run TLSVigil
+        uses: ryanvmorais/tlsvigil@3a6171c98cf91597b3746f105730d23f5abea5b0 # main
+        # Telegram or e-mail: add the secrets (Settings → Secrets and variables → Actions), add the
+        # channel to tlsvigil.toml and uncomment its lines.
+        # with:
+        #   telegram-token: ${{ secrets.TLSVIGIL_TELEGRAM_TOKEN }}
+        #   telegram-chat-id: ${{ secrets.TLSVIGIL_TELEGRAM_CHAT_ID }}
+        #   smtp-username: ${{ secrets.TLSVIGIL_SMTP_USERNAME }}
+        #   smtp-password: ${{ secrets.TLSVIGIL_SMTP_PASSWORD }}
+        #   smtp-from: ${{ secrets.TLSVIGIL_SMTP_FROM }}
+        #   smtp-to: ${{ secrets.TLSVIGIL_SMTP_TO }}

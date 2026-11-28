@@ -32,9 +32,13 @@ updates:
           - "minor"
           - "patch"
 
-  # GitHub Actions pinned by SHA in .github/workflows/ and in the root action.yml ("/" covers both).
+  # GitHub Actions pinned by SHA in .github/workflows/ and in the root action.yml ("/" covers both),
+  # and in the template's workflow: outside "/", Dependabot reads the directory named, not its
+  # .github/workflows, so the template's entry names that folder.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/template/.github/workflows"
     schedule:
       interval: "weekly"
       day: "sunday"
@@ -47,6 +51,10 @@ updates:
       - "dependencies"
     cooldown:
       default-days: 7
+    # The template pins this repository itself; a release moves that pin to its own commit and tag,
+    # so a weekly bump to the head of main is not wanted.
+    ignore:
+      - dependency-name: "ryanvmorais/tlsvigil"
     groups:
       github-actions-minor-patch:
         update-types:
