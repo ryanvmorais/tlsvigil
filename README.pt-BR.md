@@ -1,4 +1,4 @@
-# TLSVigil
+# <img align="bottom" alt="Logotipo do TLSVigil: um cadeado com um olho aberto" src="docs/images/tlsvigil-tls-certificate-expiry-monitor-logo.svg" width="28"> TLSVigil
 
 [English](README.md) · **Português (Brasil)**
 

@@ -1,6 +1,8 @@
-# TLSVigil
+# <img align="bottom" alt="TLSVigil logo: a padlock with an open eye" src="https://raw.githubusercontent.com/ryanvmorais/tlsvigil/main/docs/images/tlsvigil-tls-certificate-expiry-monitor-logo.svg" width="28"> TLSVigil
 
 **English** · [Português (Brasil)](README.pt-BR.md)
+
+<!-- The logo is an HTML <img> with an absolute URL: the PyPI rewrite in pyproject.toml covers only Markdown images. -->
 
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![runtime deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)

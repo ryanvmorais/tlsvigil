@@ -111,7 +111,8 @@ tests/              # pytest; the CLI is driven through main(argv), and the docs
   data/action/      # the configurations the CI "Action" job runs (a closed loopback port)
   certs.py          # the test certificates trustme does not make (self-signed, no AKI)
 specs/              # spec-driven development: requirements → design → tasks per feature
-docs/               # stack.md: each technology and why it was chosen
+docs/               # stack.md: each technology and why it was chosen;
+                    #   images/: the logo (one evenodd <path>) and the social preview
 .githooks/          # versioned pre-commit hook (core.hooksPath)
 .claude/            # Claude Code hooks: format on edit, validate at turn end, guard uv.lock
 .github/            # CI, CodeQL, dependency review, weekly pip-audit, Dependabot, templates
