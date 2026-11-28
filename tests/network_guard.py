@@ -3,7 +3,9 @@ The network guard of the test suite: no test reaches a real network.
 
 :func:`install` wraps the two calls every connection in the standard library passes through,
 :func:`socket.getaddrinfo` and :meth:`socket.socket.connect` (plus ``connect_ex``), so that
-``socket.create_connection``, :mod:`ssl`, :mod:`http.client` and :mod:`urllib` are all covered.
+``socket.create_connection``, :mod:`ssl`, :mod:`http.client` and :mod:`urllib` are all covered,
+and the older lookups (``gethostbyname``, ``gethostbyname_ex``, ``gethostbyaddr``) through which
+``socket.getfqdn`` and :mod:`smtplib` look up the machine's own name (spec 005, RF-10).
 A name resolves only when it is ``localhost`` or an IP literal, and a connection goes only to
 the loopback interface (``127.0.0.0/8``, ``::1``). Anything else raises
 :class:`NetworkAccessError`, an ``AssertionError``: code under test that catches ``OSError``
@@ -15,6 +17,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,6 +26,10 @@ import pytest
 # Names the guard lets resolve: the loopback name only. IP literals resolve too (no lookup is
 # made for them), and the connect wrapper decides whether the address is allowed.
 _ALLOWED_NAMES = frozenset({"localhost"})
+
+# The lookups older than getaddrinfo, each with the host as its one argument; `socket.getfqdn()`
+# calls `gethostbyaddr(gethostname())`, and smtplib falls back to `gethostbyname`.
+_OLDER_LOOKUPS = ("gethostbyname", "gethostbyname_ex", "gethostbyaddr")
 
 # ---------------------------------------------------------------------------
 # Result and error
@@ -39,8 +46,8 @@ class NetworkGuard:
     What the guard saw during one test, for the tests that assert on it.
 
     Attributes:
-        lookups (list[object]): The host of every :func:`socket.getaddrinfo` call, allowed or
-            not, in order.
+        lookups (list[object]): The host of every :func:`socket.getaddrinfo` call and of every
+            older lookup, allowed or not, in order.
         connects (list[object]): The address of every ``connect`` and ``connect_ex`` call,
             allowed or not, in order.
     """
@@ -157,7 +164,22 @@ def install(monkeypatch: pytest.MonkeyPatch) -> NetworkGuard:
             raise NetworkAccessError(f"test tried to connect to {address!r}, not loopback")
         return real_connect_ex(self, address)
 
+    def lookup(name: str) -> Callable[[Any], Any]:
+        """Wrap one of the older lookups, which take the host as their only argument."""
+        real = getattr(socket, name)
+
+        def wrapper(host: Any) -> Any:
+            """Record the lookup; refuse a name that is not a loopback name."""
+            guard.lookups.append(host)
+            if not name_allowed(host):
+                raise NetworkAccessError(f"test tried to look up {host!r}, not a loopback name")
+            return real(host)
+
+        return wrapper
+
     monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    for name in _OLDER_LOOKUPS:
+        monkeypatch.setattr(socket, name, lookup(name))
     monkeypatch.setattr(socket.socket, "connect", connect)
     monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
     return guard

@@ -623,6 +623,69 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
         Lang.EN: "GitHub sent an answer TLSVigil cannot read",
         Lang.PT_BR: "o GitHub enviou uma resposta que o TLSVigil não consegue ler",
     },
+    # Why the Telegram message could not be sent (spec 005, RF-09).
+    "telegram.unreachable": {
+        Lang.EN: "the Telegram Bot API could not be reached: {kind}",
+        Lang.PT_BR: "não foi possível falar com a API de bots do Telegram: {kind}",
+    },
+    "telegram.refused": {
+        Lang.EN: "Telegram refused the message: {description}",
+        Lang.PT_BR: "o Telegram recusou a mensagem: {description}",
+    },
+    "telegram.http": {
+        Lang.EN: "Telegram answered HTTP {status}",
+        Lang.PT_BR: "o Telegram respondeu HTTP {status}",
+    },
+    "telegram.invalid": {
+        Lang.EN: "Telegram sent an answer TLSVigil cannot read",
+        Lang.PT_BR: "o Telegram enviou uma resposta que o TLSVigil não consegue ler",
+    },
+    # Why the e-mail could not be sent (spec 005, RF-10; ADR-6). A recipient is counted, never
+    # named; the server's reply code and text follow in parentheses where the sentence allows.
+    "mail.unreachable": {
+        Lang.EN: "the SMTP server could not be reached: {kind}",
+        Lang.PT_BR: "não foi possível falar com o servidor SMTP: {kind}",
+    },
+    "mail.no_starttls": {
+        Lang.EN: "the SMTP server does not offer STARTTLS, so the user name was not sent",
+        Lang.PT_BR: "o servidor SMTP não oferece STARTTLS, então o usuário não foi enviado",
+    },
+    "mail.too_long": {
+        Lang.EN: "the SMTP server sent a reply longer than {limit} lines",
+        Lang.PT_BR: "o servidor SMTP enviou uma resposta com mais de {limit} linhas",
+    },
+    "mail.closed": {
+        Lang.EN: "the SMTP server closed the connection",
+        Lang.PT_BR: "o servidor SMTP fechou a conexão",
+    },
+    "mail.auth": {
+        Lang.EN: "the SMTP server refused the user name or the password",
+        Lang.PT_BR: "o servidor SMTP recusou o usuário ou a senha",
+    },
+    "mail.sender": {
+        Lang.EN: "the SMTP server refused the sender",
+        Lang.PT_BR: "o servidor SMTP recusou o remetente",
+    },
+    "mail.recipients.one": {
+        Lang.EN: "the SMTP server refused {count} recipient",
+        Lang.PT_BR: "o servidor SMTP recusou {count} destinatário",
+    },
+    "mail.recipients.other": {
+        Lang.EN: "the SMTP server refused {count} recipients",
+        Lang.PT_BR: "o servidor SMTP recusou {count} destinatários",
+    },
+    "mail.reply": {
+        Lang.EN: "the SMTP server answered {code}",
+        Lang.PT_BR: "o servidor SMTP respondeu {code}",
+    },
+    "mail.header": {
+        Lang.EN: "a header of the e-mail would hold a line break, so nothing was sent",
+        Lang.PT_BR: "um cabeçalho do e-mail teria uma quebra de linha, então nada foi enviado",
+    },
+    "mail.other": {
+        Lang.EN: "the SMTP session failed",
+        Lang.PT_BR: "a sessão SMTP falhou",
+    },
     # The state file (spec 005, RF-07; ADR-2): why it was read as empty, so the run counts as
     # the first; and why it could not be written, so the next run repeats a message.
     "state.unreadable": {

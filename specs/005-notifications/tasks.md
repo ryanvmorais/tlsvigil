@@ -150,31 +150,31 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 4 — Telegram and e-mail
 
-- [ ] `src/tlsvigil/telegram.py`: `TelegramChannel.deliver`: one `POST` to `sendMessage` with
+- [x] `src/tlsvigil/telegram.py`: `TelegramChannel.deliver`: one `POST` to `sendMessage` with
   `chat_id`, `text` and `link_preview_options`, no `parse_mode`, the 64 KiB cap, a refusal read
   from `ok` and `description`, the URL in no message. — RF-09, RNF-02, RNF-04
-- [ ] `src/tlsvigil/mail.py`: `_BoundedSMTP` and `_BoundedSMTPSSL` with `local_hostname` and the
+- [x] `src/tlsvigil/mail.py`: `_BoundedSMTP` and `_BoundedSMTPSSL` with `local_hostname` and the
   bounded `getreply` (the time left before each line, 100 lines at most); `MailChannel.deliver`
   with the `EmailMessage` of the design, STARTTLS required before `login`, the context of
   `certificate.create_context`, every `smtplib` exception as the message, refused recipients
   counted and never named. — RF-10, RNF-01, RNF-02, RNF-04, RNF-05, ADR-6
-- [ ] `tests/fake_apis.py`: `FakeTelegram`, recording each message and answering a refusal on
+- [x] `tests/fake_apis.py`: `FakeTelegram`, recording each message and answering a refusal on
   demand (a wrong token, a chat the bot cannot write to, a `429`). — RF-14
-- [ ] `tests/smtp_server.py`: `LocalSMTPServer` on `127.0.0.1` with implicit TLS or STARTTLS,
+- [x] `tests/smtp_server.py`: `LocalSMTPServer` on `127.0.0.1` with implicit TLS or STARTTLS,
   `AUTH PLAIN` and `LOGIN`, the commands and the messages recorded, and the modes without
   `STARTTLS`, silent, endless continuation lines and recipient refused. — RF-14, ADR-11
-- [ ] `tests/test_telegram.py`: the request body and the path; text with Markdown and HTML sent as
+- [x] `tests/test_telegram.py`: the request body and the path; text with Markdown and HTML sent as
   is; each refusal with Telegram's description and no token in the message. — RF-09, RF-14
-- [ ] `tests/test_mail.py`: a message over implicit TLS and over STARTTLS, read back with
+- [x] `tests/test_mail.py`: a message over implicit TLS and over STARTTLS, read back with
   `email.message_from_bytes` (plain text, UTF-8, the headers); a server without STARTTLS and one
   with an untrusted certificate failing with no `AUTH` recorded, and with STARTTLS offered `AUTH`
   recorded as the control; a silent server bounded by the deadline; an endless reply refused at
   the line cap; a refused recipient counted and not named; a header value with a line break
   refused; no lookup of the machine's name (the network guard). — RF-10, RNF-04, RNF-05, RF-14
-- [ ] See the new tests fail once: `parse_mode` set to `MarkdownV2`, the STARTTLS check removed,
+- [x] See the new tests fail once: `parse_mode` set to `MarkdownV2`, the STARTTLS check removed,
   the line cap removed, the deadline not reset before a line, the refused recipient named; each
   goes red, then the change is undone. — RF-09, RF-10, ADR-6
-- [ ] Quality gate. —
+- [x] Quality gate. — ruff, black, mypy and pytest green (1363 tests, 99% coverage)
 
 ## Stage 5 — `tlsvigil check --notify`
 

@@ -75,15 +75,18 @@ src/tlsvigil/       # the package: __main__.py (python -m tlsvigil),
                     #   state.py (the state file: load_state(), save_state(), reset_for())
                     #   messages.py (the words of the issue, the comment, Telegram, e-mail)
                     #   github.py (GitHubChannel: find, tell, bring the issue up to date)
+                    #   telegram.py (TelegramChannel: one plain-text sendMessage)
+                    #   mail.py (MailChannel: smtplib bounded by one deadline and a line cap)
                     #   delivery.py (Delivery, DeliveryOutcome: what a channel did)
 tests/              # pytest; the CLI is driven through main(argv), and the docs have tests too
   runs.py           # the clock, the leaves and the RDAP registry shared by the run tests
   reports.py        # hand-built reports for the output and CLI tests (no network)
   conftest.py       # installs the network guard (autouse) and the CA and local-server fixtures
-  network_guard.py  # resolve and connect on loopback only; anything else fails the test
+  network_guard.py  # resolve and connect on loopback only (older lookups too); else the test fails
   tls_server.py     # LocalServer: a TLS, silent or plain-text server on 127.0.0.1 and ::1
   http_server.py    # LocalHTTPServer: HTTPS routes (fixed, silent, drip, endless, handled)
-  fake_apis.py      # FakeGitHub: issues and comments in memory, headers and token checked
+  fake_apis.py      # FakeGitHub and FakeTelegram: state in memory, headers and token checked
+  smtp_server.py    # LocalSMTPServer: TLS or STARTTLS, AUTH, the commands recorded, misbehaving modes
   data/rdap/        # the hand-written RDAP answers the tests read and serve
   certs.py          # the test certificates trustme does not make (self-signed, no AKI)
 specs/              # spec-driven development: requirements → design → tasks per feature
@@ -113,6 +116,9 @@ renders the report. The specs to come add, in this order: the notifications with
 | `src/tlsvigil/state.py` (a field, the version, the write) | spec `005` (RF-07, ADR-2); `tests/test_state.py` lists the fields a saved file may hold |
 | `src/tlsvigil/messages.py` (a message, an escape, a cap) | spec `005` (RF-11, ADR-5); `tests/test_messages.py` fails when a notification sentence holds a Markdown character |
 | `src/tlsvigil/github.py` (a step, a request, a failure) | spec `005` (RF-08, ADR-3, ADR-4; the table of "The GitHub issue"); four requests at most |
+| `src/tlsvigil/telegram.py` (the request, a refusal) | spec `005` (RF-09, ADR-5); no `parse_mode`, and the URL holds the token, so no part of it reaches a message |
+| `src/tlsvigil/mail.py` (the session, a failure) | spec `005` (RF-10, ADR-6); `getreply` is copied from `smtplib` and must follow it; STARTTLS is required, never opportunistic |
+| `tests/smtp_server.py` | spec `005` (ADR-11); it offers `AUTH` in clear on purpose, so a client that skips STARTTLS is caught |
 | `src/tlsvigil/environment.py` (a variable, a form, the Redactor) | spec `005` (RF-03, ADR-7, ADR-10); `config.py` names the same variables in its secret-like keys |
 | `src/tlsvigil/cli.py` (flags, exit codes, streams) | spec `004` (ADR-3 on exit `3`, ADR-7 on the test seams, deviation 5 on `--config` with `--host`) |
 | `src/tlsvigil/config.py` (keys, defaults, places) | spec `004` (ADR-2 on the validators' codes, ADR-6 on the size cap, ADR-8 on host forms); both READMEs show the keys |

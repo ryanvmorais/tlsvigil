@@ -775,3 +775,32 @@ which is what RF-10 guards.
   unused (1 red; green before the test checked that the room left is under one line), the length
   counted in characters instead of UTF-16 (1 red), the permission header read before the rate
   limit (1 red), and a closed issue kept (2 red).
+- **Stage 4:** `TelegramChannel(settings, *, timeout, context=None, api_url=API_URL)` and
+  `MailChannel(settings, *, timeout, context=None)` keep the contract of `GitHubChannel.deliver`:
+  a plan without events sends nothing and gives `UNCHANGED` with `told` set to the view, and a
+  failure gives back the old part. The `chat_id` goes as the string of the environment (the Bot
+  API takes an integer or a string). Only the JSON `true` in `ok` is a success; an answer with no
+  `description` is `telegram.http`, and a `2xx` that is not JSON is `telegram.invalid`. A request
+  with no answer is `telegram.unreachable` with the words of `request.<kind>` and without the
+  exception's text, which the GitHub channel adds: the URL holds the token. The bounded sessions
+  share a `_Bounded` subclass of `smtplib.SMTP`: the time left is set before each line read and
+  before each write, the deadline passed is a `TimeoutError` (not a disconnection, so the message
+  says `timeout`), and a reply still going at its 100th line is `ReplyTooLong`. The e-mail is
+  built before the connection, so a header with a line break opens none; its `Message-ID` takes
+  the sender's domain, and its body is quoted-printable, 7-bit for a server without `8BITMIME`.
+  When the server takes the e-mail for some recipients and refuses others, the delivery fails
+  (`the SMTP server refused 1 recipient`) but `told` advances: the others were told, and a repeat
+  would reach them twice. A `QUIT` that fails after the e-mail was taken changes nothing. The
+  refused sender is quoted in the server's reply text; the Redactor of stage 5 removes it. The
+  failure sentences are `telegram.*` and `mail.*`. The network guard now also wraps
+  `gethostbyname`, `gethostbyname_ex` and `gethostbyaddr`, through which `socket.getfqdn` looks
+  up the machine's name; that is what makes "no lookup of the machine's name" a test.
+  `LocalSMTPServer` offers `AUTH` in clear even when it leaves `STARTTLS` out, as a server whose
+  `STARTTLS` was stripped does, and asks for `AUTH` before `MAIL`; beyond the design's modes it
+  can turn the client away (`busy`), hang up after the first command and refuse the sender, so
+  each failure sentence has a test. Seen failing (each change undone): `parse_mode` set to
+  `MarkdownV2` (2 red), a Telegram failure giving the view instead of the old part (9 red),
+  STARTTLS made opportunistic (1 red), the line cap removed (1 red), the deadline set once
+  instead of before each line (1 red), the refused recipient named (1 red), a partial refusal
+  giving the old part (1 red), `local_hostname` left out (12 red, through the network guard),
+  and the guard without the older lookups (5 red).
