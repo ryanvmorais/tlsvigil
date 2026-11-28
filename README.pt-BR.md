@@ -24,8 +24,8 @@ gratuitos do GitHub Actions, e abre uma issue lá quando algo pede atenção.
 > **Status:** em desenvolvimento, ainda não lançado; o primeiro lançamento será a `1.0.0`. Este
 > README descreve a ferramenta como ela está especificada em [specs/](specs/). Hoje o
 > `tlsvigil check` roda a partir de um clone, mostra o resultado e, com `--notify`, entrega o
-> resultado na issue do GitHub, no Telegram ou por e-mail; a Action está especificada, mas ainda
-> não construída.
+> resultado na issue do GitHub, no Telegram ou por e-mail; a Action roda o comando num workflow, e
+> o repositório-modelo ainda não foi publicado (os arquivos dele estão em [template/](template/)).
 
 ## O que ele verifica
 
@@ -245,6 +245,141 @@ O que cada canal já ouviu fica no arquivo de estado (`--state`). Guarde esse ar
 execuções: sem ele, toda execução é a primeira e cada aviso é dado de novo, nunca escondido. Um
 canal cuja entrega falha guarda o que tinha ouvido antes, então a execução seguinte tenta de novo,
 e os canais que deram certo não ouvem duas vezes.
+
+## GitHub Actions
+
+A Action roda o `tlsvigil check --notify` num runner hospedado pelo GitHub, com o Python do próprio
+runner e nada para instalar, e guarda o arquivo de estado entre as execuções por você. Só com o
+canal `github` ela não precisa de segredo nenhum: a issue é escrita com o token do próprio workflow.
+
+### Comece pelo modelo
+
+O repositório-modelo traz um `tlsvigil.toml`, o workflow diário e um arquivo do Dependabot que
+propõe cada release nova do TLSVigil. Ele ainda não foi publicado; os arquivos dele estão em
+[template/](template/).
+
+1. **Crie o seu repositório** a partir do modelo (**Use this template** → **Create a new
+   repository**), público ou privado. Não como fork: um fork começa com o agendamento desligado.
+2. **Diga o que verificar:** edite o `tlsvigil.toml` e faça o commit na `main`. Esse commit dispara
+   uma verificação; a aba **Actions** mostra a execução, com o resultado no resumo dela.
+3. **Acompanhe o repositório** com **Watch** → **All Activity**. A issue é aberta por
+   `github-actions[bot]`, e o GitHub só notifica quem acompanha o repositório; num repositório
+   movimentado, **Custom** → **Issues** é mais silencioso.
+4. **Opcional:** acrescente `telegram` ou `smtp` em `channels`, os segredos do canal no
+   repositório, e tire o comentário das linhas dele no workflow.
+
+### Use num repositório seu
+
+Ponha o `tlsvigil.toml` na raiz do repositório e este workflow em
+`.github/workflows/tlsvigil.yml`; ele é o do modelo, palavra por palavra:
+
+```yaml
+# TLSVigil: checks the certificates and domains of tlsvigil.toml every day and keeps one issue of
+# this repository up to date with what needs attention. Run by GitHub Actions on the schedule, by
+# hand (Actions → TLSVigil → Run workflow) and on a push to main that changes tlsvigil.toml.
+# The run is red when nothing could be checked or a notification was not delivered; a warning,
+# a host that could not be reached among them, is an issue, not a red run.
+name: TLSVigil
+
+on:
+  schedule:
+    - cron: "17 7 * * *" # every day at 07:17 UTC; GitHub may start it late
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [tlsvigil.toml]
+
+# contents: read to check out tlsvigil.toml; issues: write for the "github" channel only.
+permissions:
+  contents: read
+  issues: write
+
+# One check at a time: a second run waits for the first, so the saved state is never raced.
+concurrency:
+  group: tlsvigil
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run TLSVigil
+        uses: ryanvmorais/tlsvigil@3a6171c98cf91597b3746f105730d23f5abea5b0 # main
+        # Telegram or e-mail: add the secrets (Settings → Secrets and variables → Actions), add the
+        # channel to tlsvigil.toml and uncomment its lines.
+        # with:
+        #   telegram-token: ${{ secrets.TLSVIGIL_TELEGRAM_TOKEN }}
+        #   telegram-chat-id: ${{ secrets.TLSVIGIL_TELEGRAM_CHAT_ID }}
+        #   smtp-username: ${{ secrets.TLSVIGIL_SMTP_USERNAME }}
+        #   smtp-password: ${{ secrets.TLSVIGIL_SMTP_PASSWORD }}
+        #   smtp-from: ${{ secrets.TLSVIGIL_SMTP_FROM }}
+        #   smtp-to: ${{ secrets.TLSVIGIL_SMTP_TO }}
+```
+
+Fixe a Action num SHA de commit completo, como acima, nunca numa branch ou numa tag que pode
+mudar. As duas permissões são tudo de que ela precisa: `contents: read` para o checkout e
+`issues: write` para a issue; o cache que guarda o estado não pede nenhuma. Mantenha o grupo de
+concorrência num workflow seu, para que uma execução disparada à mão espere a agendada em vez de
+disputar o estado com ela.
+
+### Entradas e saída
+
+| Entrada | Padrão | O que faz |
+|---|---|---|
+| `config` | `tlsvigil.toml` | O arquivo de configuração, relativo ao workspace |
+| `lang` | vazio | O idioma do relatório, `en` ou `pt-BR`; vazio mantém o `lang` do arquivo |
+| `notify` | `true` | `true` entrega aos canais de `[notifications]` e guarda o estado; `false` só verifica |
+| `fail-on-attention` | `false` | `true` faz o passo falhar quando algo pede atenção, mesmo depois de entregue |
+| `github-token` | `${{ github.token }}` | O token do canal `github` (`GITHUB_TOKEN`) |
+| `telegram-token` | vazio | O token do bot do canal `telegram` (`TLSVIGIL_TELEGRAM_TOKEN`) |
+| `telegram-chat-id` | vazio | O chat do canal `telegram` (`TLSVIGIL_TELEGRAM_CHAT_ID`) |
+| `smtp-username` | vazio | O usuário do canal `smtp` (`TLSVIGIL_SMTP_USERNAME`) |
+| `smtp-password` | vazio | A senha dele (`TLSVIGIL_SMTP_PASSWORD`) |
+| `smtp-from` | vazio | O remetente, um endereço sem nome de exibição (`TLSVIGIL_SMTP_FROM`) |
+| `smtp-to` | vazio | Os destinatários, separados por vírgula (`TLSVIGIL_SMTP_TO`) |
+
+| Saída | O que guarda |
+|---|---|
+| `exit-code` | O código de saída da verificação, de `0` a `4`; `2` também para uma entrada inválida ou um runner sem Python 3.12 ou mais novo |
+
+Cada entrada de canal vira a variável entre parênteses, a de
+[Segredos e endereços](#segredos-e-endereços), então o valor dela deve vir dos segredos do
+repositório (`${{ secrets.TLSVIGIL_TELEGRAM_TOKEN }}`), nunca escrito no workflow. Uma entrada
+vazia não define nada. A Action esconde os tokens e a senha no log, e o relatório que ela escreve
+no log e no resumo fica cercado, então um texto vindo de um certificado ou de uma resposta RDAP
+nunca é lido como comando do workflow nem como Markdown.
+
+### O estado e a cor de uma execução
+
+O arquivo de estado fica no cache do Actions: cada execução restaura a entrada mais nova e salva a
+sua. Sem ele, a execução seguinte é a primeira e dá cada aviso atual mais uma vez; nada fica
+escondido. O GitHub apaga uma entrada de cache que passa 7 dias sem uso, então um agendamento
+pausado por mais tempo recomeça desse jeito.
+
+O passo segue o [código de saída](#linha-de-comando) da verificação. `0` e `1` ficam verdes: um
+aviso, entre eles um host que não respondeu, é entregue, não é uma falha, e
+`fail-on-attention: true` deixa o `1` vermelho. `2` (nada foi conferido: a configuração ou uma
+entrada está errada), `3` (um bug) e `4` (uma notificação não foi entregue) ficam vermelhos, e o
+resumo da execução diz qual.
+
+### Limites da plataforma
+
+- **Uma execução agendada pode atrasar** e, com o GitHub sobrecarregado, ser descartada; a do dia
+  seguinte põe em dia.
+- **Um repositório público sem atividade por 60 dias** tem o agendamento desligado; religue na aba
+  **Actions**.
+- **Um fork começa com os workflows agendados desligados,** e os segredos do original não chegam a
+  ele.
+- **Num repositório privado,** cada execução gasta minutos da cota de Actions do plano; uma
+  verificação leva cerca de um minuto.
+- **Um runner próprio (self-hosted)** precisa de Python 3.12 ou mais novo no path, ou de um passo
+  `actions/setup-python` antes deste.
 
 ## TLSVigil e outras ferramentas
 
