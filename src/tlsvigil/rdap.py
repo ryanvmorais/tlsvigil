@@ -13,14 +13,22 @@ as plain strings, and nothing in an answer decides which server is asked next (R
 
 from __future__ import annotations
 
+import http.client
 import json
 import math
 import re
+import socket
+import ssl
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Final
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
+
+from tlsvigil import __version__
+from tlsvigil.certificate import create_context
 
 __all__ = [
     "BOOTSTRAP_URL",
@@ -46,6 +54,16 @@ MAX_BOOTSTRAP_BYTES: Final = 2 * 1024 * 1024
 MAX_DOMAIN_BYTES: Final = 512 * 1024
 # Registries redirect to a canonical path at most once or twice; three bounds a loop (ADR-5).
 MAX_REDIRECTS: Final = 3
+
+# Every request sends these and `Host`, nothing else: no cookie, no credential (RF-06).
+_REQUEST_HEADERS: Final = {
+    "Accept": "application/rdap+json",
+    # No compression, so no compression bomb to bound (ADR-4).
+    "Accept-Encoding": "identity",
+    "User-Agent": f"tlsvigil/{__version__}",
+    # One request per connection: nothing is reused between the bootstrap and a domain.
+    "Connection": "close",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -540,6 +558,187 @@ def _read_domain_answer(
 
 
 # ---------------------------------------------------------------------------
+# The request
+# ---------------------------------------------------------------------------
+
+
+class _RequestFailed(Exception):
+    """
+    A request that ended without a usable body, with the kind the result will carry.
+
+    Attributes:
+        kind (ErrorKind): The kind of failure (the table of "The request" in the design).
+        message (str): The text of the failure, as plain text.
+    """
+
+    def __init__(self, kind: ErrorKind, message: str) -> None:
+        """
+        Keep the kind and the message.
+
+        Args:
+            kind (ErrorKind): The kind of failure.
+            message (str): The text of the failure.
+        """
+        super().__init__(message)
+        self.kind = kind
+        self.message = message
+
+
+@dataclass(frozen=True, slots=True)
+class _Redirect:
+    """
+    A redirect answer, before the check of where it points.
+
+    Attributes:
+        location (str | None): The ``Location`` header, or ``None`` when it sent none.
+    """
+
+    location: str | None
+
+
+# The statuses that carry a `Location` to follow (RFC 9110, section 15.4).
+_REDIRECT_STATUSES: Final = frozenset({301, 302, 303, 307, 308})
+# A bounded read, so a body past the cap is refused after one chunk more at most (ADR-4).
+_READ_SIZE: Final = 64 * 1024
+# Named so that a URL with the port written out and one without compare as the same origin.
+_HTTPS_PORT: Final = 443
+
+
+def _origin(url: str) -> tuple[str, str, int]:
+    """
+    Give the scheme, the host and the port a URL reaches.
+
+    Args:
+        url (str): An absolute URL.
+
+    Returns:
+        tuple[str, str, int]: The scheme and the host in lowercase (the host ``""`` when the URL
+            has none) and the port, ``443`` when the URL names none.
+
+    Raises:
+        ValueError: When the port is not a number in range or the host has an unbalanced ``[``.
+    """
+    parts = urlsplit(url)
+    port = _HTTPS_PORT if parts.port is None else parts.port  # not `or`: port 0 is not 443
+    return parts.scheme.lower(), (parts.hostname or ""), port
+
+
+def _request_target(url: str) -> str:
+    """
+    Give the path and the query of a URL, as the request line sends them.
+
+    Args:
+        url (str): An absolute URL.
+
+    Returns:
+        str: The path (``/`` when empty) and, when there is one, ``?`` and the query; the
+            fragment is never sent.
+    """
+    parts = urlsplit(url)
+    target = parts.path or "/"
+    return f"{target}?{parts.query}" if parts.query else target
+
+
+def _too_large(cap: int) -> _RequestFailed:
+    """
+    Give the failure of an answer over its cap.
+
+    Args:
+        cap (int): The cap, in bytes.
+
+    Returns:
+        _RequestFailed: ``too_large``, with the cap in KiB in the message.
+    """
+    return _RequestFailed(ErrorKind.TOO_LARGE, f"the answer is larger than {cap // 1024} KiB")
+
+
+def _status_failure(status: int) -> _RequestFailed:
+    """
+    Give the failure of a status outside ``2xx`` that is not a redirect (RF-05).
+
+    Args:
+        status (int): The status code.
+
+    Returns:
+        _RequestFailed: ``not_found`` for ``404``, ``rate_limited`` for ``429`` and ``http``
+            otherwise, each with the code in the message.
+    """
+    if status == 404:
+        return _RequestFailed(ErrorKind.NOT_FOUND, "HTTP 404: the registry has no such domain")
+    if status == 429:
+        # Not retried: a retry would double the load on a registry that is already limiting
+        # requests (requirements, resolved decision 7).
+        return _RequestFailed(ErrorKind.RATE_LIMITED, "HTTP 429: the registry limits requests")
+    return _RequestFailed(ErrorKind.HTTP, f"HTTP {status}")
+
+
+def _follow(url: str, location: str | None) -> str:
+    """
+    Resolve a redirect, and refuse it unless it stays on the same origin (ADR-5).
+
+    Args:
+        url (str): The URL that answered with the redirect.
+        location (str | None): Its ``Location`` header, or ``None`` when it sent none.
+
+    Returns:
+        str: The URL to ask next.
+
+    Raises:
+        _RequestFailed: ``redirect``, for a missing ``Location`` or another scheme, host or port.
+    """
+    if location is None:
+        raise _RequestFailed(ErrorKind.REDIRECT, "a redirect without a Location")
+    target = urljoin(url, location)
+    try:
+        same_origin = _origin(target) == _origin(url)
+    except ValueError:  # a port that is not a number in range, an unbalanced "["
+        same_origin = False
+    if not same_origin:
+        # The answer is data: its Location never decides which host is asked (RNF-03).
+        raise _RequestFailed(ErrorKind.REDIRECT, "a redirect to another scheme, host or port")
+    return target
+
+
+def _read_body(
+    response: http.client.HTTPResponse,
+    sock: socket.socket,
+    cap: int,
+    remaining: Callable[[], float],
+) -> bytes:
+    """
+    Read a body in chunks, within the cap and the deadline (ADR-3, ADR-4).
+
+    Args:
+        response (http.client.HTTPResponse): The answer, its headers read.
+        sock (socket.socket): The socket under the answer; its timeout is set to the time left
+            before each read.
+        cap (int): The largest body accepted, in bytes.
+        remaining (Callable[[], float]): Gives the seconds left, or raises once the deadline
+            has passed.
+
+    Returns:
+        bytes: The whole body.
+
+    Raises:
+        _RequestFailed: ``too_large`` past the cap, ``timeout`` once the deadline has passed.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    # The answer closes itself, and the socket with it, at the end of the body: at its
+    # Content-Length, its last chunk, or the close of the connection. An empty read always ends
+    # it, and the deadline bounds the loop in any case.
+    while not response.isclosed():
+        # A byte now and then resets a socket timeout; the deadline bounds the sum (ADR-3).
+        sock.settimeout(remaining())
+        chunk = response.read1(_READ_SIZE)
+        total += len(chunk)
+        if total > cap:
+            raise _too_large(cap)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+# ---------------------------------------------------------------------------
 # The client
 # ---------------------------------------------------------------------------
 
@@ -557,6 +756,7 @@ class RdapClient:
         self,
         *,
         timeout: float = 10.0,
+        context: ssl.SSLContext | None = None,
         bootstrap_url: str = BOOTSTRAP_URL,
     ) -> None:
         """
@@ -565,6 +765,9 @@ class RdapClient:
         Args:
             timeout (float): Seconds for each whole request, a finite number greater than ``0``
                 (ADR-3).
+            context (ssl.SSLContext | None): The client context of every request; ``None``
+                means :func:`~tlsvigil.certificate.create_context` (ADR-6). The tests pass one
+                that also trusts their own CA.
             bootstrap_url (str): The ``https://`` URL of the bootstrap; the tests point it at a
                 local server.
 
@@ -575,6 +778,175 @@ class RdapClient:
         _validate_https_url(bootstrap_url)
         self.timeout = timeout
         self.bootstrap_url = bootstrap_url
+        self._context = create_context() if context is None else context
+        # The bootstrap once fetched, or the failure it led to; None until a domain needs it.
+        self._bootstrap: Bootstrap | _RequestFailed | None = None
+
+    def check_domain(self, domain: str, *, now: datetime | None = None) -> DomainResult:
+        """
+        Ask the registry of ``domain`` for its record and report what it gave (RF-01 to RF-05).
+
+        Every way a check can end comes back as a value: the method raises only for bad
+        arguments. The bootstrap is fetched on the first call that needs it and reused by the
+        later ones, its failure included; then one request is sent for the domain, and nothing
+        is retried.
+
+        Args:
+            domain (str): The domain as registered, such as ``example.com.br`` (RF-07).
+            now (datetime | None): The time to count the days left from, aware; ``None`` means
+                the current time.
+
+        Returns:
+            DomainResult: ``DATED`` with the expiration and the days left, ``UNDATED`` with the
+                reason the date is unknown, or ``ERROR`` with the kind of failure.
+
+        Raises:
+            ValueError: When the domain or ``now`` is bad; no request is sent then.
+        """
+        name = _normalize_domain(domain)
+        _validate_now(now)
+        checked_at = datetime.now(UTC) if now is None else now.astimezone(UTC)
+
+        bootstrap = self._get_bootstrap()
+        if isinstance(bootstrap, _RequestFailed):
+            return DomainResult(
+                name,
+                checked_at,
+                Outcome.ERROR,
+                error_kind=ErrorKind.BOOTSTRAP,
+                message=bootstrap.message,
+            )
+        base_url = bootstrap.base_url_for(name)
+        if base_url is None:
+            return DomainResult(
+                name, checked_at, Outcome.UNDATED, reason=UnknownReason.NO_RDAP_SERVICE
+            )
+
+        # The host of the URL asked, never a name read from an answer (RNF-03).
+        server = _origin(base_url)[1]
+        try:
+            body = self._get(f"{base_url}domain/{name}", MAX_DOMAIN_BYTES)
+        except _RequestFailed as failure:
+            return DomainResult(
+                name,
+                checked_at,
+                Outcome.ERROR,
+                server=server,
+                error_kind=failure.kind,
+                message=failure.message,
+            )
+        return _read_domain_answer(body, domain=name, server=server, checked_at=checked_at)
+
+    def _get_bootstrap(self) -> Bootstrap | _RequestFailed:
+        """
+        Give the bootstrap, fetching it on the first call; a failure is kept like a success.
+
+        Returns:
+            Bootstrap | _RequestFailed: The parsed bootstrap, or the failure of its fetch with
+                the kind ``bootstrap`` and the message of the failure (RF-04).
+        """
+        if self._bootstrap is None:
+            try:
+                body = self._get(self.bootstrap_url, MAX_BOOTSTRAP_BYTES)
+                self._bootstrap = _parse_bootstrap(body)
+            except _RequestFailed as failure:
+                self._bootstrap = _RequestFailed(ErrorKind.BOOTSTRAP, failure.message)
+            except ValueError as exc:  # the document is not a bootstrap
+                self._bootstrap = _RequestFailed(ErrorKind.BOOTSTRAP, str(exc))
+        return self._bootstrap
+
+    def _get(self, url: str, cap: int) -> bytes:
+        """
+        Send one bounded ``GET`` and give the body of its ``2xx`` answer (RF-05, RF-06).
+
+        One deadline covers the whole request, its redirects included (ADR-3). A redirect is
+        followed only on the same scheme, host and port, :data:`MAX_REDIRECTS` times at most
+        (ADR-5), and the body is refused past ``cap`` (ADR-4). No proxy variable is read:
+        :mod:`http.client` looks at none (ADR-2).
+
+        Args:
+            url (str): An ``https://`` URL with a host.
+            cap (int): The largest body accepted, in bytes.
+
+        Returns:
+            bytes: The body of the answer.
+
+        Raises:
+            _RequestFailed: For every way the request can fail, with its kind and message.
+        """
+        deadline = time.monotonic() + self.timeout
+
+        def remaining() -> float:
+            """Give the seconds left before the deadline, or fail once it has passed."""
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise _RequestFailed(
+                    ErrorKind.TIMEOUT, f"the request took longer than {self.timeout} s"
+                )
+            return left
+
+        for _ in range(1 + MAX_REDIRECTS):
+            try:
+                answer = self._get_once(url, cap, remaining)
+            except _RequestFailed:
+                raise
+            except socket.gaierror as exc:
+                raise _RequestFailed(ErrorKind.DNS, _message(exc)) from None
+            except ConnectionRefusedError as exc:
+                raise _RequestFailed(ErrorKind.REFUSED, _message(exc)) from None
+            except TimeoutError as exc:
+                raise _RequestFailed(ErrorKind.TIMEOUT, _message(exc)) from None
+            except ssl.SSLError as exc:  # before OSError, of which it is a subclass
+                raise _RequestFailed(ErrorKind.TLS, _message(exc)) from None
+            except (http.client.HTTPException, OSError, ValueError) as exc:
+                # ValueError: a host or a path that http.client cannot encode (deviation 7).
+                raise _RequestFailed(ErrorKind.OTHER, _message(exc)) from None
+            if isinstance(answer, bytes):
+                return answer
+            url = _follow(url, answer.location)
+        raise _RequestFailed(ErrorKind.REDIRECT, f"more than {MAX_REDIRECTS} redirects")
+
+    def _get_once(self, url: str, cap: int, remaining: Callable[[], float]) -> bytes | _Redirect:
+        """
+        Send one ``GET`` over one connection, closed on every path.
+
+        Args:
+            url (str): The URL to ask.
+            cap (int): The largest body accepted, in bytes.
+            remaining (Callable[[], float]): Gives the seconds left, or raises once the deadline
+                has passed.
+
+        Returns:
+            bytes | _Redirect: The body of a ``2xx`` answer, or the redirect it answered with.
+
+        Raises:
+            _RequestFailed: For a status outside ``2xx`` that is not a redirect, a body over the
+                cap, or the deadline passed.
+            OSError: From the connection, the handshake or a read; ``_get`` maps it.
+            http.client.HTTPException: From the status line or the headers; ``_get`` maps it.
+        """
+        _, host, port = _origin(url)
+        connection = http.client.HTTPSConnection(
+            host, port, timeout=remaining(), context=self._context
+        )
+        try:
+            connection.request("GET", _request_target(url), headers=_REQUEST_HEADERS)
+            # Kept, because http.client hands the socket to the answer and forgets it.
+            sock = connection.sock
+            if sock is None:  # pragma: no cover - request() always leaves a connected socket
+                raise http.client.NotConnected("no connection after the request")
+            sock.settimeout(remaining())
+            with connection.getresponse() as response:
+                if response.status in _REDIRECT_STATUSES:
+                    return _Redirect(response.getheader("Location"))
+                if not 200 <= response.status < 300:
+                    raise _status_failure(response.status)
+                # Refused before the body is read (ADR-4).
+                if response.length is not None and response.length > cap:
+                    raise _too_large(cap)
+                return _read_body(response, sock, cap, remaining)
+        finally:
+            connection.close()
 
 
 # ---------------------------------------------------------------------------
