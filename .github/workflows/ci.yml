@@ -246,7 +246,7 @@ jobs:
               status=1
             fi
           }
-          expect "needs attention" "$ATTENTION" "success 0"
+          expect "needs attention" "$ATTENTION" "success 1"
           expect "fail-on-attention" "$FAIL_ON_ATTENTION" "failure 1"
           expect "missing configuration" "$MISSING_CONFIG" "failure 2"
           expect "invalid input" "$INVALID_INPUT" "failure 2"
