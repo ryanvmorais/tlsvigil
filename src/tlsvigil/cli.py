@@ -349,7 +349,8 @@ def main(
         now (datetime | None): The time to count the days left from; ``None`` means the clock.
             Only the tests pass it (ADR-7).
         environ (Mapping[str, str] | None): Where ``--notify`` reads the channels' variables;
-            ``None`` means :data:`os.environ`. Only the tests pass it (spec 005, ADR-9).
+            ``None`` means :data:`os.environ`. The tests pass it (spec 005, ADR-9), and so does
+            the Action, with the variables its inputs become (spec 006, ADR-3).
         github_api_url (str): The root of the GitHub REST API. Only the tests change it.
         telegram_api_url (str): The root of the Telegram Bot API. Only the tests change it.
 

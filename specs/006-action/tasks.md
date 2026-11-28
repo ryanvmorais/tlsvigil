@@ -51,35 +51,35 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 1 — The run, the commands and the summary
 
-- [ ] `src/tlsvigil/action.py`: the tee over the standard output and error (`write`, `flush`,
+- [x] `src/tlsvigil/action.py`: the tee over the standard output and error (`write`, `flush`,
   `fileno`), keeping one copy of both, in order, up to `MAX_SUMMARY_BYTES`. — RF-06, ADR-3
-- [ ] `src/tlsvigil/action.py`: the summary: the `### TLSVigil` heading, the fence one backtick
+- [x] `src/tlsvigil/action.py`: the summary: the `### TLSVigil` heading, the fence one backtick
   longer than the longest run (three at least), the copy cut at a whole line with the
   `action.summary_cut` line; written only when `GITHUB_STEP_SUMMARY` is set. — RF-06, ADR-5
-- [ ] `src/tlsvigil/action.py`: `main(environ=None, *, check=_check)`: the inputs, the masks,
+- [x] `src/tlsvigil/action.py`: `main(environ=None, *, check=_check)`: the inputs, the masks,
   `::stop-commands::` with a fresh token and its resume in a `finally`, the arguments as a list with
   the `--config=` and `--lang=` forms and, with `notify`, `--notify` and `--state=` in
   `STATE_DIR` (created first), the call of `cli.main(argv, environ=…)` under the tee, the outputs
   `exit-code` and `state=written` through `GITHUB_OUTPUT`, and the step's result. — RF-01, RF-02,
   RF-04, RF-05, RNF-03, ADR-3, ADR-5
-- [ ] `src/tlsvigil/i18n.py`: `action.summary_cut` in both languages. — RF-06
-- [ ] `src/tlsvigil/cli.py`: the docstring of `environ` says that the Action passes it too. — ADR-3
-- [ ] `tests/test_action.py`: the masks before `::stop-commands::`, the resume line last, after a
+- [x] `src/tlsvigil/i18n.py`: `action.summary_cut` in both languages. — RF-06
+- [x] `src/tlsvigil/cli.py`: the docstring of `environ` says that the Action passes it too. — ADR-3
+- [x] `tests/test_action.py`: the masks before `::stop-commands::`, the resume line last, after a
   crash of `check` too, and two runs with different tokens; a summary with a run of five backticks,
   HTML, a mention and a link inside a fence of six; a summary over the cap cut at a whole line with
   the note; no summary and no output file when their variables are not set; `exit-code` always and
   `state=written` only when the state file exists; a `config` that starts with `-` reaching the
   command as a value. — RF-04, RF-05, RF-06, RNF-02, ADR-5
-- [ ] `tests/test_action.py`: the whole run through `action.main` with the command's seams, against
+- [x] `tests/test_action.py`: the whole run through `action.main` with the command's seams, against
   the local TLS server and `FakeGitHub`: a first run with no state directory opens the issue and
   writes the state; a second run with that state adds nothing; a planted invalid state file is read
   as empty; a secret planted in every input appears in no output, summary or output file. — RF-01,
   RF-05, RNF-03
-- [ ] See the new tests fail once: the fence shortened by one, the resume moved out of the
+- [x] See the new tests fail once: the fence shortened by one, the resume moved out of the
   `finally`, the masks printed after `::stop-commands::`, `state=written` written without the file,
   the `--config` value passed as a separate argument; each goes red, then the change is undone. —
-  RF-05, RF-06, ADR-5
-- [ ] Quality gate. —
+  RF-05, RF-06, ADR-5; the other guards too (implementation notes)
+- [x] Quality gate. — ruff, black, mypy and pytest green (1502 tests, 99% coverage; `action.py` 100%)
 
 ## Stage 2 — `action.yml` and the CI job
 

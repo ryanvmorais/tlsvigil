@@ -8,16 +8,28 @@ a shell script (RNF-02). :func:`read_inputs` validates them before any check, an
 :func:`channel_environment` turns the channel inputs into the variables spec 005 reads (ADR-8).
 :func:`step_result` turns the command's exit code into the result of the step: a warning that was
 delivered is not a failed run (RF-04).
+
+:func:`main` runs ``tlsvigil check`` in the same process (ADR-3), between ``::stop-commands::``
+and its resume, so no line of the output is read as a workflow command, and copies the output into
+the run's summary inside a code block no line can close (ADR-5).
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import io
+import os
+import re
+import secrets
+import sys
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from pathlib import Path
+from typing import Final, TextIO, cast
 
-from tlsvigil.cli import EXIT_ATTENTION, EXIT_OK
-from tlsvigil.i18n import Lang, parse_lang
+from tlsvigil import cli
+from tlsvigil.cli import EXIT_ATTENTION, EXIT_OK, EXIT_USAGE
+from tlsvigil.i18n import Lang, parse_lang, translate
+from tlsvigil.state import DEFAULT_STATE
 
 __all__ = [
     "CHANNEL_INPUTS",
@@ -27,12 +39,15 @@ __all__ = [
     "SECRET_INPUTS",
     "STATE_DIR",
     "STATE_FILE",
+    "Check",
     "InputError",
     "Inputs",
     "channel_environment",
     "input_variable",
+    "main",
     "read_inputs",
     "step_result",
+    "summary",
 ]
 
 # ---------------------------------------------------------------------------
@@ -233,3 +248,284 @@ def step_result(code: int, fail_on_attention: bool) -> int:
     if code == EXIT_OK or (code == EXIT_ATTENTION and not fail_on_attention):
         return EXIT_OK
     return code
+
+
+# ---------------------------------------------------------------------------
+# The copy of the output (RF-06; ADR-3)
+# ---------------------------------------------------------------------------
+
+
+class _Copy:
+    """
+    The output of the run, both streams in the order written, up to a size in bytes.
+
+    Attributes:
+        cut (bool): Whether some of the output did not fit.
+    """
+
+    def __init__(self, limit: int) -> None:
+        """
+        Start an empty copy.
+
+        Args:
+            limit (int): The most bytes the copy keeps, counted in UTF-8.
+        """
+        self._parts: list[str] = []
+        self._room = limit
+        self.cut = False
+
+    def keep(self, text: str) -> None:
+        """
+        Add a text, or the part of it that fits; nothing is added once the copy is full.
+
+        Args:
+            text (str): What a stream was given.
+        """
+        data = text.encode("utf-8", "replace")
+        if len(data) <= self._room:
+            self._parts.append(text)
+            self._room -= len(data)
+            return
+        # The part that fits; a character split at the edge is dropped, and text() drops the
+        # rest of that line anyway.
+        self._parts.append(data[: self._room].decode("utf-8", "ignore"))
+        self._room = 0
+        self.cut = True
+
+    def text(self) -> str:
+        """
+        Give the copy; a cut one ends at the last whole line that fit.
+
+        Returns:
+            str: The output as it was written.
+        """
+        whole = "".join(self._parts)
+        if self.cut:
+            whole = whole[: whole.rfind("\n") + 1]
+        return whole
+
+
+class _Tee(io.TextIOBase):
+    """A standard stream that writes to the real one and keeps a copy (ADR-3)."""
+
+    def __init__(self, stream: TextIO, copy: _Copy) -> None:
+        """
+        Wrap a stream.
+
+        Args:
+            stream (TextIO): The real stream, which the log of the step reads.
+            copy (_Copy): The copy both streams share, so it keeps their order.
+        """
+        super().__init__()
+        self._stream = stream
+        self._copy = copy
+
+    def write(self, text: str, /) -> int:
+        """
+        Write a text to the real stream and keep it in the copy.
+
+        Args:
+            text (str): The text.
+
+        Returns:
+            int: Its length, as a stream gives it.
+        """
+        self._copy.keep(text)
+        self._stream.write(text)
+        return len(text)
+
+    def flush(self) -> None:
+        """Flush the real stream."""
+        self._stream.flush()
+
+    def fileno(self) -> int:
+        """
+        Give the real stream's descriptor, which the command points at the null device when the
+        reader has gone.
+
+        Returns:
+            int: The descriptor.
+        """
+        return self._stream.fileno()
+
+    def close(self) -> None:
+        """
+        Leave the real stream as it is: the tee does not own it.
+
+        The collector closes the tee long after the run; the default close would flush the real
+        stream then, which may be closed by that time.
+        """
+
+
+# The longest run of backticks a text holds decides the fence around it.
+_BACKTICKS: Final = re.compile("`+")
+
+
+def summary(text: str, cut: bool, lang: Lang) -> str:
+    """
+    Write the summary of the run: a heading and the output in one fenced code block (ADR-5).
+
+    The fence is one backtick longer than the longest run of backticks in the block, and never
+    shorter than three, so no line can close it (CommonMark, "Fenced code blocks"), and nothing
+    inside is read as Markdown, HTML, a link or a mention.
+
+    Args:
+        text (str): The copy of the output.
+        cut (bool): Whether the copy was cut; the block then ends with ``action.summary_cut``.
+        lang (Lang): The language of that line.
+
+    Returns:
+        str: The Markdown to append to the summary file.
+    """
+    body = text if not text or text.endswith("\n") else text + "\n"
+    if cut:
+        body += translate(lang, "action.summary_cut") + "\n"
+    longest = max((len(run) for run in _BACKTICKS.findall(body)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return f"### TLSVigil\n\n{fence}\n{body}{fence}\n"
+
+
+# ---------------------------------------------------------------------------
+# The run (RF-01, RF-04 to RF-06; ADR-3, ADR-5)
+# ---------------------------------------------------------------------------
+
+# The command as the module calls it: the arguments and the environment of the channels in, the
+# exit code out. The tests pass one with the command's own seams (spec 004, ADR-7).
+Check = Callable[[Sequence[str], Mapping[str, str]], int]
+
+
+def _check(argv: Sequence[str], environ: Mapping[str, str]) -> int:
+    """
+    Run ``tlsvigil check`` in this process (ADR-3).
+
+    Args:
+        argv (Sequence[str]): The arguments, ``check`` first.
+        environ (Mapping[str, str]): Where the channels read their variables.
+
+    Returns:
+        int: The command's exit code.
+    """
+    return cli.main(argv, environ=environ)
+
+
+def _command(line: str) -> None:
+    """
+    Print one workflow command and flush it, so it reaches the log before what follows.
+
+    Args:
+        line (str): The command, such as ``::add-mask::value``.
+    """
+    sys.stdout.write(line + "\n")
+    sys.stdout.flush()
+
+
+def _append(environ: Mapping[str, str], variable: str, text: str) -> None:
+    """
+    Append a text to the file a variable of the runner names; nothing when it is not set.
+
+    Args:
+        environ (Mapping[str, str]): The step's environment.
+        variable (str): ``GITHUB_STEP_SUMMARY`` or ``GITHUB_OUTPUT``.
+        text (str): What to append.
+    """
+    if path := environ.get(variable):
+        # newline="" writes "\n" as it is, on Windows too.
+        with open(path, "a", encoding="utf-8", errors="replace", newline="") as file:
+            file.write(text)
+
+
+def _state_path(environ: Mapping[str, str]) -> Path:
+    """
+    Give the state file of the run (RF-05; ADR-4).
+
+    Args:
+        environ (Mapping[str, str]): The step's environment.
+
+    Returns:
+        Path: ``state.json`` in the directory the cache restores and saves; outside Actions,
+            where that variable is not set, the command's own default file.
+    """
+    if directory := environ.get(STATE_DIR):
+        return Path(directory) / STATE_FILE
+    return Path(DEFAULT_STATE)
+
+
+def _arguments(inputs: Inputs, state: Path | None) -> list[str]:
+    """
+    Build the command's arguments as a list, never as the text of a shell script (RNF-02).
+
+    Args:
+        inputs (Inputs): The validated inputs.
+        state (Path | None): The state file with ``notify``; ``None`` without it.
+
+    Returns:
+        list[str]: The arguments, ``check`` first. Each value is joined to its option by ``=``,
+            so a path that starts with ``-`` stays a value.
+    """
+    argv = ["check"]
+    if inputs.config is not None:
+        argv.append(f"--config={inputs.config}")
+    if inputs.lang is not None:
+        argv.append(f"--lang={inputs.lang}")
+    if state is not None:
+        argv += ["--notify", f"--state={state}"]
+    return argv
+
+
+def main(environ: Mapping[str, str] | None = None, *, check: Check = _check) -> int:
+    """
+    Run the Check step of the Action.
+
+    Args:
+        environ (Mapping[str, str] | None): The step's environment; ``None`` means
+            :data:`os.environ`. Only the tests pass it.
+        check (Check): Runs the command. Only the tests pass it, with the command's seams.
+
+    Returns:
+        int: The exit code of the step (RF-04): ``0`` when it succeeds, otherwise the command's
+            code, or ``2`` for an invalid input.
+    """
+    environ = os.environ if environ is None else environ
+    try:
+        inputs = read_inputs(environ)
+    except InputError as error:
+        lang = error.lang or Lang.EN
+        for name, key in error.problems:
+            # The name and the sentence are the module's own; the value is never written.
+            _command(f"::error title=TLSVigil::{translate(lang, key, name=name)}")
+        _append(environ, "GITHUB_OUTPUT", f"exit-code={EXIT_USAGE}\n")
+        return EXIT_USAGE
+
+    # Before the commands stop: a mask inside the fenced part would be ignored. A mask covers
+    # one line, so a value with several gets one per line.
+    for secret in inputs.secrets:
+        for line in secret.splitlines():
+            if line:
+                _command(f"::add-mask::{line}")
+    # A fresh token, so no text of the run can know it and turn the commands back on (ADR-5).
+    token = secrets.token_hex(16)
+    _command(f"::stop-commands::{token}")
+
+    copy = _Copy(MAX_SUMMARY_BYTES)
+    out, err = sys.stdout, sys.stderr
+    state: Path | None = None
+    try:
+        if inputs.notify:
+            state = _state_path(environ)
+            # The first run has no cache to restore, so no directory either.
+            state.parent.mkdir(parents=True, exist_ok=True)
+        sys.stdout = cast(TextIO, _Tee(out, copy))
+        sys.stderr = cast(TextIO, _Tee(err, copy))
+        code = check(_arguments(inputs, state), channel_environment(environ))
+    finally:
+        sys.stdout, sys.stderr = out, err
+        err.flush()
+        _command(f"::{token}::")
+
+    lang = inputs.lang or Lang.EN
+    _append(environ, "GITHUB_STEP_SUMMARY", summary(copy.text(), copy.cut, lang))
+    outputs = f"exit-code={code}\n"
+    if state is not None and state.is_file():
+        outputs += "state=written\n"
+    _append(environ, "GITHUB_OUTPUT", outputs)
+    return step_result(code, inputs.fail_on_attention)

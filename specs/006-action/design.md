@@ -470,6 +470,14 @@ notes.
    two accept the same spellings; `--lang` behaves as before.
 2. **`input_variable(name)` is public** (ADR-8): the tests and the files check build the
    `TLSVIGIL_INPUT_*` names with it instead of repeating the rule.
+3. **`summary(text, cut, lang)` is public** (ADR-5): the tests check the fence against texts
+   of their own without running the step.
+4. **Outside Actions, the state file is the command's default** (RF-05): with `notify` and no
+   `TLSVIGIL_STATE_DIR`, the module passes `--state=.tlsvigil-state.json`, the file
+   `tlsvigil check --notify` uses on its own; `action.yml` always sets the variable.
+5. **An invalid input is one `::error` line per problem** (RF-02): `::error title=TLSVigil::`
+   and the catalogue's sentence, which names the input and never holds its value, so each
+   problem is also an annotation of the run.
 
 ## Implementation notes
 
@@ -478,3 +486,14 @@ in `tests/test_action.py`. Each guard was seen failing once, then restored: the 
 their case (3 tests red), an empty channel input setting an empty variable (2), the
 `TLSVIGIL_INPUT_*` names left in the command's environment (1), exit `1` failing the step without
 `fail-on-attention` (2). Gate: 1465 tests, 99% coverage.
+
+**Stage 1.** The tee, the summary and `main()` in `action.py`, 35 more tests in
+`tests/test_action.py`, the whole run among them (the real command against the local TLS server
+and `FakeGitHub`). The tee's `close()` leaves the real stream alone: the collector closes the
+tee after the run, and the default would flush a stream that may be closed by then. Each guard
+was seen failing once, then restored: the fence shortened by one (3 tests red), the resume moved
+out of the `finally` (1), the masks printed after `::stop-commands::` (3), `state=written`
+without the file (1), the `--config` value as a separate argument (3), the copy not cut at a
+whole line (3), the cap counted in characters (1), a split character decoded strictly (1), a
+secret masked whole (1), an empty line masked (1), no state directory made (4), `fileno` of
+another stream (1). Gate: 1502 tests, 99% coverage, `action.py` 100%.
