@@ -61,7 +61,7 @@ Delivery is the milestone of the build (`v0.x`). No milestone is published: the 
 | [`001-foundation`](001-foundation/) | package skeleton, `tlsvigil --version`, the local quality gate, CI, supply-chain hygiene, the documentation guards | `v0.1` | **done** |
 | [`002-certificate`](002-certificate/) | the TLS check of `host:port`: verified handshake, days left, a failed verification as a finding; the offline test server | `v0.2` | **done** |
 | [`003-rdap`](003-rdap/) | the domain expiry over RDAP: the IANA bootstrap, the `expiration` event, bounded HTTPS requests; the offline HTTP server | `v0.3` | **done** |
-| `004-config-and-output` | the TOML configuration, the text and `--json` output, `--lang en\|pt-BR` and the exit codes | — | planned |
+| [`004-config-and-output`](004-config-and-output/) | the `tlsvigil check` command: the TOML configuration, the text and `--json` output, `--lang en\|pt-BR` and the exit codes | — | approved |
 | `005-notifications` | one GitHub issue that is opened, updated and closed; Telegram and SMTP as optional channels; no duplicate warnings | — | planned |
 | `006-action` | the composite Action in `action.yml` and the template repository with the daily workflow | — | planned |
 
