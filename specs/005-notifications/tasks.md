@@ -23,26 +23,26 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 0 — The shared HTTPS exchange
 
-- [ ] `src/tlsvigil/https.py`: `Response`, `RequestError` (the kinds `dns`, `refused`, `timeout`,
+- [x] `src/tlsvigil/https.py`: `Response`, `RequestError` (the kinds `dns`, `refused`, `timeout`,
   `tls`, `too_large`, `other`), `deadline_after(timeout)` and `request(method, url, *, headers,
   body, cap, deadline, context)`: one `HTTPSConnection` closed on every path, `Connection: close`
   and `Accept-Encoding: identity` always sent, the capped read loop and the deadline moved from
   `rdap.py`, any status returned and no redirect followed. — RNF-01, RNF-02, RNF-05, ADR-1
-- [ ] `src/tlsvigil/rdap.py`: `_get` calls `https.request()`, keeps its same-origin redirect loop,
+- [x] `src/tlsvigil/rdap.py`: `_get` calls `https.request()`, keeps its same-origin redirect loop,
   maps `RequestError` kinds and the statuses to `ErrorKind` as before; `_get_once` and
   `_read_body` removed. — ADR-1
-- [ ] `tests/http_server.py`: `do_POST` and `do_PATCH`; `RecordedRequest.body`; a `Route.handler`
+- [x] `tests/http_server.py`: `do_POST` and `do_PATCH`; `RecordedRequest.body`; a `Route.handler`
   kind that computes the status, headers and body from the recorded request; the existing routes
   and their tests unchanged. — RF-14
-- [ ] `tests/test_https.py`: a `2xx` with its headers in lowercase; a `3xx` returned with its
+- [x] `tests/test_https.py`: a `2xx` with its headers in lowercase; a `3xx` returned with its
   `Location`, and no second request recorded; a `POST` and a `PATCH` with their bodies and
   headers as sent; silent, drip and endless answers bounded by the deadline and the cap; a
   `Content-Length` over the cap refused before the body; an untrusted certificate as `tls`; a
   refused port as `refused`. — RNF-02, RNF-05, RF-14
-- [ ] See the new tests fail once: `request()` following a redirect, the cap compared with `>=`
+- [x] See the new tests fail once: `request()` following a redirect, the cap compared with `>=`
   instead of `>`, the deadline not reset before a read, the `POST` body not sent; each goes red,
   then the change is undone. The RDAP tests of spec `003` pass with no edit. — ADR-1
-- [ ] Quality gate. —
+- [x] Quality gate. —
 
 ## Stage 1 — The configuration and the environment
 

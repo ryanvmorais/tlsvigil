@@ -1,5 +1,5 @@
 """
-Tests for the local HTTPS server the RDAP tests talk to (spec 003, RF-08).
+Tests for the local HTTPS server of the RDAP and exchange tests (spec 003, RF-08; spec 005, RF-14).
 
 Each test drives the ``https_server`` fixture with :mod:`http.client` and ``client_context``, the
 context of the check with the test CA trusted, so the server is exercised the way the RDAP client
@@ -15,7 +15,7 @@ import time
 
 import pytest
 
-from http_server import LocalHTTPServer, Route
+from http_server import LocalHTTPServer, RecordedRequest, Route
 from tlsvigil.certificate import create_context
 
 # A client timeout long enough for a loaded CI machine, short enough to fail fast.
@@ -146,6 +146,77 @@ def test_each_request_is_recorded_with_its_path_and_headers(
     assert first.header("user-agent") == "tlsvigil/test"
     assert first.header("Host") == f"127.0.0.1:{https_server.port}"
     assert first.header("Cookie") is None
+
+
+# ---------------------------------------------------------------------------
+# Computed answers (spec 005, RF-14)
+# ---------------------------------------------------------------------------
+
+
+def _send(
+    server: LocalHTTPServer, context: ssl.SSLContext, method: str, body: bytes | None
+) -> tuple[int, bytes]:
+    """
+    Send one request with a body to ``/issues`` and read the whole answer.
+
+    Args:
+        server (LocalHTTPServer): The running server.
+        context (ssl.SSLContext): The client context.
+        method (str): The method.
+        body (bytes | None): The body, or ``None`` for none.
+
+    Returns:
+        tuple[int, bytes]: The status and the body.
+    """
+    conn = http.client.HTTPSConnection(server.host, server.port, timeout=_TIMEOUT, context=context)
+    try:
+        conn.request(method, "/issues", body=body)
+        response = conn.getresponse()
+        return response.status, response.read()
+    finally:
+        conn.close()
+
+
+def test_a_handled_route_answers_from_the_method_and_the_body_it_recorded(
+    https_server: LocalHTTPServer, client_context: ssl.SSLContext
+) -> None:
+    def issues(request: RecordedRequest) -> Route:
+        """Create on POST, edit on PATCH, refuse anything else."""
+        match request.method:
+            case "POST":
+                return Route(201, b"created " + request.body)
+            case "PATCH":
+                return Route(200, b"edited " + request.body)
+        return Route(405)
+
+    https_server.routes["/issues"] = Route.handled(issues)
+
+    assert _send(https_server, client_context, "POST", b"one") == (201, b"created one")
+    assert _send(https_server, client_context, "PATCH", b"two") == (200, b"edited two")
+    assert _send(https_server, client_context, "GET", None) == (405, b"")
+    assert [(r.method, r.body) for r in https_server.requests] == [
+        ("POST", b"one"),
+        ("PATCH", b"two"),
+        ("GET", b""),
+    ]
+    assert https_server.errors == []
+
+
+def test_a_handler_that_gives_another_handler_is_recorded_as_an_error(
+    https_context: ssl.SSLContext, client_context: ssl.SSLContext
+) -> None:
+    nested = Route.handled(lambda request: Route(200))
+    # A server of its own, so its exit joins the request thread before `errors` is read.
+    with (
+        LocalHTTPServer(
+            https_context, {"/issues": Route.handled(lambda request: nested)}
+        ) as server,
+        pytest.raises((http.client.HTTPException, OSError)),
+    ):
+        _send(server, client_context, "POST", b"{}")
+
+    assert len(server.requests) == 1
+    assert [type(error) for error in server.errors] == [ValueError]
 
 
 # ---------------------------------------------------------------------------
