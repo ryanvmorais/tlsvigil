@@ -237,7 +237,7 @@ through `printable()`.
 
 `printable(text)` replaces every character whose Unicode category is `Cc`, `Cf`, `Cs`, `Co`, `Cn`,
 `Zl` or `Zp` (control and format characters, the bidirectional overrides, line and paragraph
-separators) with its Python escape (`\x1b`, `‮`), so the result is one line and no terminal
+separators) with its Python escape (`\x1b`, `\u202e`), so the result is one line and no terminal
 sequence. It is applied to every value from the outside and from the file, not to the catalogue.
 
 ### JSON output (RF-07; ADR-5)
@@ -593,3 +593,19 @@ brackets are the only way to give a port to an IPv6 address.
   threshold replaced by the table's (2 red), `utf-8-sig` turned into `utf-8` (1 red), the cap
   check written `>=` (1 red), `isfinite` removed (2 red), and the bracket rule of ADR-8 dropped
   (12 red).
+- **Stage 2:** `runner.STATUSES` holds the five status values in the order the summary counts
+  them; a test checks that it is exactly the union of the two `Status` enums. The new keys of the
+  catalogue are `status.*` (the labels), `line.*` (the detail of each kind of line), `summary`
+  with `checked.*` and `attention.*` (two counts, each with its own plural), and the words of
+  `reason.certificate.*`, `error.certificate.*`, `reason.domain.*` and `error.domain.*`, one per
+  enum member. An `invalid` line names the reason without the message, as in the example above;
+  the message stays in the JSON. The text line carries no issuer, so the escape tests of the text
+  run on an error message and on a name, and the issuer's escape is tested in the JSON.
+  `render_json` takes no language, so its output is the same in both by its signature, and that
+  test of the test strategy is not written. A report without items, which a valid configuration
+  never gives, renders the summary alone. The hand-built reports live in `tests/reports.py`, and
+  the domain answers of `test_runner.py` are dated from the test's clock, as the leaves must be.
+  Seen failing (each change undone): `error` removed from `ATTENTION` (6 red), the client created
+  without domains (4 red), `Cf` removed from `printable()` (5 red), `ensure_ascii=False` (1 red),
+  the `message` key left out of an error item (1 red), the singular key for every count (10 red),
+  and the name cut at 40 characters (1 red).
