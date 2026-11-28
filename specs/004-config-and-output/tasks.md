@@ -116,28 +116,33 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 3 — The command
 
-- [ ] `src/tlsvigil/cli.py`: `build_parser()` with the `check` sub-command, `--config`, the
+- [x] `src/tlsvigil/cli.py`: `build_parser()` with the `check` sub-command, `--config`, the
   exclusive group with `--host` and `--domain`, `--json`, and `--lang` with its `type`; the
-  English help. — RF-01, RF-03, RF-08
-- [ ] `src/tlsvigil/cli.py`: `main(argv, *, context, bootstrap_url, now)` with the steps of the
+  English help. — RF-01, RF-03, RF-08. The exclusion is checked after parsing (deviation 5)
+- [x] `src/tlsvigil/cli.py`: `main(argv, *, context, bootstrap_url, now)` with the steps of the
   design: the streams reconfigured, no sub-command giving the usage and `2`, the language chosen,
   the `ConfigError` written to the standard error, the run and the render, `0` or `1`, `except
   Exception` giving `3` with the traceback, and the `BrokenPipeError` handling. — RF-01, RF-02,
   RF-08, RF-09, RNF-03, ADR-3, ADR-7
-- [ ] `src/tlsvigil/i18n.py`: the sentences of the command (the missing default file with its
+- [x] `src/tlsvigil/i18n.py`: the sentences of the command (the missing default file with its
   hint, the heading of a configuration error, the internal error), in both languages. — RF-02,
-  RF-08
-- [ ] `tests/test_cli.py`: a bare `tlsvigil` exits `2` with the usage; `--version` unchanged.
-  — RF-01
-- [ ] `tests/test_cli_check.py`: the end-to-end cases of the design's test strategy, each with
+  RF-08. Four `cli.*` keys
+- [x] `tests/test_cli.py`: a bare `tlsvigil` exits `2` with the usage; `--version` unchanged.
+  — RF-01. Also: the parser collects every `--host` and `--domain` in order
+- [x] `tests/test_cli_check.py`: the end-to-end cases of the design's test strategy, each with
   its exit code, and an invalid file opening no connection, with the same file fixed as the
-  control. — RF-01 to RF-03, RF-06 to RF-09, RNF-03, RF-11
-- [ ] See the new tests fail once: the flag and key precedence of the language swapped, the
+  control. — RF-01 to RF-03, RF-06 to RF-09, RNF-03, RF-11. The helpers shared with
+  `test_runner.py` moved to the new `tests/runs.py`
+- [x] See the new tests fail once: the flag and key precedence of the language swapped, the
   `except Exception` removed (the crash then exits `1`), the `--config`/`--host` group made
   non-exclusive, the streams left without `backslashreplace`, the file read even with `--host`,
   the configuration error printed to the standard output; each goes red, then the change is
-  undone. — RF-03, RF-08, RF-09, RNF-03
-- [ ] Quality gate. —
+  undone. — RF-03, RF-08, RF-09, RNF-03. Red: 2, 2, 2, 1, 12 and 9 tests, in that order. Also
+  sabotaged: the hint given for a path passed by hand (1 red), the place of a problem left
+  unescaped (1 red), and the standard output left on the closed pipe (2 red)
+- [x] Quality gate. — 752 passed (42 new: 33 in `test_cli_check.py`, 1 in `test_cli.py`, 8
+  in `test_i18n.py` for the new keys); ruff/black/mypy green; `src` at 100% of lines and
+  branches; `test_cli.py`, `test_cli_check.py` and `test_runner.py` also pass on Python 3.12
 
 ## Stage 4 — Documentation and closing
 

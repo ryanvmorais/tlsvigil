@@ -21,7 +21,7 @@ import pytest
 
 import tlsvigil
 from tlsvigil import __version__
-from tlsvigil.cli import main
+from tlsvigil.cli import build_parser, main
 
 # Resolved from this file, not from the working directory, so the test passes wherever pytest runs.
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
@@ -85,8 +85,27 @@ def test_python_m_prints_the_same_version_line(
 # ---------------------------------------------------------------------------
 
 
-def test_no_arguments_exits_zero() -> None:
-    assert main([]) == 0
+def test_no_command_prints_the_usage_and_exits_two(capsys: pytest.CaptureFixture[str]) -> None:
+    # Spec 001 exited 0 here; spec 004 makes a bare `tlsvigil` a usage error (RF-01).
+    assert main([]) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("usage: tlsvigil")
+    assert "COMMAND" in captured.err
+
+
+def test_the_parser_collects_every_name_in_order() -> None:
+    args = build_parser().parse_args(
+        ["check", "--host", "a.example", "--domain", "b.example", "--host", "c.example:465"]
+    )
+
+    assert args.command == "check"
+    assert args.host == ["a.example", "c.example:465"]
+    assert args.domain == ["b.example"]
+    assert args.config is None
+    assert args.json is False
+    assert args.lang is None
 
 
 def test_unknown_flag_exits_two(capsys: pytest.CaptureFixture[str]) -> None:
