@@ -53,6 +53,13 @@ def test_a_tls_handshake_with_the_local_server_is_allowed(
     assert network_guard.connects == [(server.host, server.port)]
 
 
+def test_the_older_lookups_of_a_loopback_address_are_allowed(network_guard: NetworkGuard) -> None:
+    assert socket.gethostbyname("127.0.0.1") == "127.0.0.1"
+    assert socket.gethostbyname_ex("localhost")[2]
+
+    assert network_guard.lookups == ["127.0.0.1", "localhost"]
+
+
 # ---------------------------------------------------------------------------
 # Refusals: anything outside loopback
 # ---------------------------------------------------------------------------
@@ -100,3 +107,25 @@ def test_create_connection_to_a_public_name_is_refused_before_any_connect(
 
     assert network_guard.lookups == ["example.com"]
     assert network_guard.connects == []
+
+
+@pytest.mark.parametrize("name", ["gethostbyname", "gethostbyname_ex", "gethostbyaddr"])
+def test_an_older_lookup_of_a_public_name_is_refused(
+    network_guard: NetworkGuard, name: str
+) -> None:
+    with pytest.raises(NetworkAccessError, match=re.escape("example.com")):
+        getattr(socket, name)("example.com")
+
+    assert network_guard.lookups == ["example.com"]
+
+
+def test_looking_up_the_machine_s_own_name_is_refused(network_guard: NetworkGuard) -> None:
+    # What smtplib does without a local_hostname: getfqdn() looks up gethostname().
+    machine = socket.gethostname()
+    if machine.lower().rstrip(".") == "localhost":
+        pytest.skip("this machine is named localhost")
+
+    with pytest.raises(NetworkAccessError, match=re.escape(machine)):
+        socket.getfqdn()
+
+    assert network_guard.lookups == [machine]
