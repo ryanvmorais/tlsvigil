@@ -1,4 +1,4 @@
-# CI pipeline (GitHub Actions). Four independent jobs, each mirroring a slice of the local
+# CI pipeline (GitHub Actions). Five independent jobs, each mirroring a slice of the local
 # quality gate (.githooks/pre-commit) so that a green check means the same as a clean checkout:
 #   quality   ruff, black, mypy and pytest on every Python the classifiers claim, 3.12 (the floor)
 #             to 3.15 (the newest stable), on Linux and on Windows
@@ -6,6 +6,8 @@
 #             it installs and runs in a clean environment (the release ships this exact build)
 #   security  pip-audit over uv.lock (known CVEs in the locked graph)
 #   shell     shellcheck over the versioned Git hook
+#   action    the Action itself (`uses: ./`) on Linux, Windows and macOS, with the runner's own
+#             Python: the exit code and the result of the step for five runs (spec 006, RF-12)
 #
 # The repository is public, so Actions minutes are free: it runs on pull requests, on every push
 # to main (the merge commit is checked too) and by hand.
@@ -159,3 +161,94 @@ jobs:
 
       - name: Shellcheck the Git hook
         run: shellcheck --version && shellcheck .githooks/pre-commit
+
+  action:
+    # The Action as a workflow uses it, from this checkout, with no uv and no Python set up: the
+    # runner's own Python runs the source (spec 006, ADR-1). It reaches no channel, no real host
+    # and no API: the host is a closed port of the runner's loopback, notify is off or stops at
+    # the channel settings before any check, and only the cache restore talks to the runner's
+    # storage. Not required by the ruleset, like CodeQL.
+    name: Action (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # The three systems of the hosted runners (RNF-05); ubuntu-26.04 as everywhere else.
+        runner: [ubuntu-26.04, windows-2025, macos-26]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No later step needs the GitHub token; it is not left on disk.
+          persist-credentials: false
+
+      # Each run may fail on purpose; the last step compares every outcome and exit code.
+      - name: Needs attention, delivered (exit 1, the step succeeds)
+        id: attention
+        continue-on-error: true
+        uses: ./
+        with:
+          config: tests/data/action/refused.toml
+          notify: false
+
+      - name: Needs attention with fail-on-attention (exit 1, the step fails)
+        id: fail-on-attention
+        continue-on-error: true
+        uses: ./
+        with:
+          config: tests/data/action/refused.toml
+          notify: false
+          fail-on-attention: true
+
+      - name: A missing configuration (exit 2)
+        id: missing-config
+        continue-on-error: true
+        uses: ./
+        with:
+          config: tests/data/action/missing.toml
+          notify: false
+
+      - name: An invalid input (exit 2)
+        id: invalid-input
+        continue-on-error: true
+        uses: ./
+        with:
+          config: tests/data/action/refused.toml
+          notify: maybe
+
+      # notify on: the restore runs and finds no state; Telegram has no token, so the command
+      # stops before any check and the save is skipped.
+      - name: A channel without its settings (exit 2)
+        id: no-channel-settings
+        continue-on-error: true
+        uses: ./
+        with:
+          config: tests/data/action/telegram.toml
+          notify: true
+
+      # The values reach the script as variables, never as text of the script.
+      - name: Compare the outcomes and the exit codes
+        env:
+          ATTENTION: ${{ steps.attention.outcome }} ${{ steps.attention.outputs.exit-code }}
+          FAIL_ON_ATTENTION: ${{ steps.fail-on-attention.outcome }} ${{ steps.fail-on-attention.outputs.exit-code }}
+          MISSING_CONFIG: ${{ steps.missing-config.outcome }} ${{ steps.missing-config.outputs.exit-code }}
+          INVALID_INPUT: ${{ steps.invalid-input.outcome }} ${{ steps.invalid-input.outputs.exit-code }}
+          NO_CHANNEL_SETTINGS: ${{ steps.no-channel-settings.outcome }} ${{ steps.no-channel-settings.outputs.exit-code }}
+        shell: bash
+        run: |
+          status=0
+          expect() {
+            if [ "$2" = "$3" ]; then
+              echo "ok        $1: $2"
+            else
+              echo "::error title=Action::$1: expected \"$3\", got \"$2\""
+              status=1
+            fi
+          }
+          expect "needs attention" "$ATTENTION" "success 1"
+          expect "fail-on-attention" "$FAIL_ON_ATTENTION" "failure 1"
+          expect "missing configuration" "$MISSING_CONFIG" "failure 2"
+          expect "invalid input" "$INVALID_INPUT" "failure 2"
+          expect "channel without settings" "$NO_CHANNEL_SETTINGS" "failure 2"
+          exit "$status"

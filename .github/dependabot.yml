@@ -32,7 +32,7 @@ updates:
           - "minor"
           - "patch"
 
-  # GitHub Actions pinned by SHA in .github/workflows/.
+  # GitHub Actions pinned by SHA in .github/workflows/ and in the root action.yml ("/" covers both).
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

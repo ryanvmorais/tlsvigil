@@ -1,0 +1,127 @@
+# The TLSVigil GitHub Action (spec 006): a composite Action that runs `tlsvigil check` with the
+# runner's own Python, from the source of the commit the workflow pins, and installs nothing
+# (ADR-1). Consumed by the workflows that write `uses: <owner>/tlsvigil@<sha>`, by the template
+# repository, and by the "Action" job of .github/workflows/ci.yml (`uses: ./`).
+#
+# No input is ever written into the text of a script: each reaches the Check step as an
+# environment variable named TLSVIGIL_INPUT_<NAME>, which src/tlsvigil/action.py reads (RNF-02).
+# tests/test_action_files.py holds the inputs to action.INPUTS and every `uses:` to a full SHA.
+name: TLSVigil
+description: Get warned before a TLS certificate or a domain expires, in a GitHub issue of your own repository.
+author: Ryan Morais
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  config:
+    description: The configuration file, relative to the workspace.
+    required: false
+    default: tlsvigil.toml
+  lang:
+    description: The language of the report, `en` or `pt-BR`; empty keeps the one of the configuration file.
+    required: false
+    default: ""
+  notify:
+    description: "`true` delivers the result to the channels of `[notifications]` and keeps the state between runs; `false` only checks."
+    required: false
+    default: "true"
+  fail-on-attention:
+    description: "`true` fails the step when something needs attention even after it was delivered; by default only an error of the run fails it."
+    required: false
+    default: "false"
+  github-token:
+    description: "The token of the `github` channel; the workflow's own token by default, which needs `issues: write`."
+    required: false
+    default: ${{ github.token }}
+  telegram-token:
+    description: The bot token of the `telegram` channel, from a secret.
+    required: false
+    default: ""
+  telegram-chat-id:
+    description: The chat of the `telegram` channel, an integer or `@name`.
+    required: false
+    default: ""
+  smtp-username:
+    description: The user name of the `smtp` channel, from a secret.
+    required: false
+    default: ""
+  smtp-password:
+    description: The password of the `smtp` channel, from a secret.
+    required: false
+    default: ""
+  smtp-from:
+    description: The sender of the `smtp` channel, one bare address.
+    required: false
+    default: ""
+  smtp-to:
+    description: The recipients of the `smtp` channel, one or more addresses separated by commas.
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: The exit code of the check, `0` to `4` (`2` also for an invalid input or a runner without Python 3.12).
+    value: ${{ steps.run.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    # The state of the last run (ADR-4): each run saves its own entry, and the prefix restores the
+    # newest. A miss (the first run, or a schedule paused for over 7 days) is not an error.
+    # `==` ignores case in an expression, like the module's reading of the input.
+    - name: Restore the state
+      if: inputs.notify == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/tlsvigil-state
+        key: tlsvigil-state-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: tlsvigil-state-
+
+    # bash is on every hosted runner, Windows included (Git Bash), so one script serves all three.
+    # The first Python 3.12 or later on the path runs the source in isolated mode (ADR-2): -I keeps
+    # the workspace off sys.path and ignores the PYTHON* variables of an earlier step; -X utf8 keeps
+    # a Portuguese report intact in a Windows log. `python3` may be a stub on Windows, so its
+    # version is asked, not assumed.
+    - name: Check
+      id: run
+      shell: bash
+      env:
+        TLSVIGIL_INPUT_CONFIG: ${{ inputs.config }}
+        TLSVIGIL_INPUT_LANG: ${{ inputs.lang }}
+        TLSVIGIL_INPUT_NOTIFY: ${{ inputs.notify }}
+        TLSVIGIL_INPUT_FAIL_ON_ATTENTION: ${{ inputs.fail-on-attention }}
+        TLSVIGIL_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        TLSVIGIL_INPUT_TELEGRAM_TOKEN: ${{ inputs.telegram-token }}
+        TLSVIGIL_INPUT_TELEGRAM_CHAT_ID: ${{ inputs.telegram-chat-id }}
+        TLSVIGIL_INPUT_SMTP_USERNAME: ${{ inputs.smtp-username }}
+        TLSVIGIL_INPUT_SMTP_PASSWORD: ${{ inputs.smtp-password }}
+        TLSVIGIL_INPUT_SMTP_FROM: ${{ inputs.smtp-from }}
+        TLSVIGIL_INPUT_SMTP_TO: ${{ inputs.smtp-to }}
+        TLSVIGIL_SOURCE: ${{ github.action_path }}/src
+        TLSVIGIL_STATE_DIR: ${{ runner.temp }}/tlsvigil-state
+      run: |
+        python=""
+        for candidate in python3 python; do
+          if command -v "$candidate" >/dev/null 2>&1 &&
+            "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 12))' >/dev/null 2>&1; then
+            python=$candidate
+            break
+          fi
+        done
+        if [ -z "$python" ]; then
+          echo "exit-code=2" >>"$GITHUB_OUTPUT"
+          echo "::error title=TLSVigil::Python 3.12 or later was not found on the runner. Add a step with actions/setup-python before this one."
+          exit 2
+        fi
+        exec "$python" -I -X utf8 -c 'import sys; sys.path.insert(0, sys.argv[1]); from tlsvigil.action import main; sys.exit(main())' "$TLSVIGIL_SOURCE"
+
+    # always(): a check that failed to deliver (exit 4) still saves, so the channels that were told
+    # are not told again (spec 005, RF-07). Only a run that wrote the state saves it.
+    - name: Save the state
+      if: always() && inputs.notify == 'true' && steps.run.outputs.state == 'written'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/tlsvigil-state
+        key: tlsvigil-state-${{ github.run_id }}-${{ github.run_attempt }}

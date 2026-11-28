@@ -1,0 +1,5 @@
+# The configuration of the "Action" CI job (spec 006, RF-12): one host on a closed port of the
+# runner's own loopback, so the check reports an error that needs attention (exit code 1) without
+# reaching any network. Port 1 (tcpmux) has no listener on a GitHub-hosted runner.
+[certificates]
+hosts = ["127.0.0.1:1"]
