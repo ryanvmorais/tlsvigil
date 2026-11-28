@@ -113,25 +113,26 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 3 — The template
 
-- [ ] `template/tlsvigil.toml`: `lang`, one host and one domain, `[notifications]` with the `github`
+- [x] `template/tlsvigil.toml`: `lang`, one host and one domain, `[notifications]` with the `github`
   channel, commented lines for the other keys of specs `004` and `005`. — RF-08, ADR-7
-- [ ] `template/.github/workflows/tlsvigil.yml`: the workflow of "Interfaces", the checkout and the
+- [x] `template/.github/workflows/tlsvigil.yml`: the workflow of "Interfaces", the checkout and the
   Action pinned by SHA (the Action at the commit of `main` that Stage 2 merged, `# main`), the
   channel inputs commented. — RF-08, RF-09, RNF-06, RNF-07
-- [ ] `template/.github/dependabot.yml`: `github-actions`, weekly, 7-day cooldown. — RF-08
-- [ ] `template/README.md` and `template/README.pt-BR.md`: what the repository does, the four steps
+- [x] `template/.github/dependabot.yml`: `github-actions`, weekly, 7-day cooldown. — RF-08
+- [x] `template/README.md` and `template/README.pt-BR.md`: what the repository does, the four steps
   (watch with "All Activity"), the colour of the run, the limits of the platform, a link to this
   repository. — RF-08, RF-11
-- [ ] `.github/dependabot.yml`: the `github-actions` entry covers `/template`. — RF-08
-- [ ] `tests/test_action_files.py`: the template's workflow pinned like `action.yml`, with the three
+- [x] `.github/dependabot.yml`: the `github-actions` entry covers `/template/.github/workflows`
+  (deviation 6). — RF-08
+- [x] `tests/test_action_files.py`: the template's workflow pinned like `action.yml`, with the three
   triggers, no `pull_request`, the two permissions, the concurrency group without cancelling and a
   timeout; the template's `tlsvigil.toml` loading with `load_config`; the template's two READMEs
   with the same headings. — RF-08, RF-09, RF-12
-- [ ] `tests/test_impersonality.py`: its scope reaches `template/`. — RF-08
-- [ ] See the new tests fail once: a `pull_request` trigger, `cancel-in-progress: true`, a
+- [x] `tests/test_impersonality.py`: its scope reaches `template/`. — RF-08
+- [x] See the new tests fail once: a `pull_request` trigger, `cancel-in-progress: true`, a
   `contents: write` permission, a key the configuration does not know, a heading missing from the
   Portuguese template README; each goes red, then the change is undone. — RF-09, RF-12
-- [ ] Quality gate. —
+- [x] Quality gate. — ruff, black, mypy and pytest green (1529 tests, 99% coverage)
 
 ## Stage 4 — Documentation, the check by hand and the close of the spec
 
