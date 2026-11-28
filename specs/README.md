@@ -63,7 +63,7 @@ Delivery is the milestone of the build (`v0.x`). No milestone is published: the 
 | [`003-rdap`](003-rdap/) | the domain expiry over RDAP: the IANA bootstrap, the `expiration` event, bounded HTTPS requests; the offline HTTP server | `v0.3` | **done** |
 | [`004-config-and-output`](004-config-and-output/) | the `tlsvigil check` command: the TOML configuration, the text and `--json` output, `--lang en\|pt-BR` and the exit codes | `v0.4` | **done** |
 | [`005-notifications`](005-notifications/) | `tlsvigil check --notify`: one GitHub issue that is opened, updated and closed; Telegram and SMTP as optional channels; no duplicate warnings | `v0.5` | **done** |
-| `006-action` | the composite Action in `action.yml` and the template repository with the daily workflow | — | planned |
+| [`006-action`](006-action/) | the composite Action in `action.yml` and the template repository with the daily workflow | — | in progress |
 
 ## Maintenance notes
 
