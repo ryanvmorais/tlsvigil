@@ -3,33 +3,30 @@ Tests for the run of a configuration (spec 004, RF-01, RF-09).
 
 The run goes against the local servers of specs ``002`` and ``003``: TLS servers on the loopback
 interface with leaves made during the test, and ``https_server`` holding a bootstrap that names
-itself for ``com`` and nothing for ``org``. The leaves are verified against the real clock, so
-each test takes the time once and dates both the leaves and the domain answers from it. The counts
-are tested on reports built by hand (``reports.py``).
+itself for ``com`` and nothing for ``org`` (``runs.py``). The leaves are verified against the real
+clock, so each test takes the time once and dates both the leaves and the domain answers from it.
+The counts are tested on reports built by hand (``reports.py``).
 """
 
 from __future__ import annotations
 
-import json
 import ssl
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
 import trustme
 
 import reports
-from http_server import LocalHTTPServer, Route
+import runs
+from http_server import LocalHTTPServer
+from runs import BOOTSTRAP_PATH, leaf, serve_registry
 from tls_server import LocalServer
 from tlsvigil.config import Config, DomainEntry, HostEntry
 from tlsvigil.runner import ATTENTION, STATUSES, Report, run
 
 Serve = Callable[..., LocalServer]
 
-DATA = Path(__file__).parent / "data" / "rdap"
-BOOTSTRAP_PATH = "/dns.json"
-BASE_PATH = "/rdap/"
 # Long enough for a loaded CI machine; nothing in these tests waits for it.
 TIMEOUT = 5.0
 
@@ -37,66 +34,6 @@ TIMEOUT = 5.0
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _now() -> datetime:
-    """
-    Take the time a test counts from, to the second.
-
-    Returns:
-        datetime: The current time in UTC without microseconds, because a certificate stores its
-            dates to the second.
-    """
-    return datetime.now(UTC).replace(microsecond=0)
-
-
-def _leaf(ca: trustme.CA, now: datetime, valid_for: timedelta) -> trustme.LeafCert:
-    """
-    Issue a leaf for ``localhost`` that expires ``valid_for`` after ``now``.
-
-    Args:
-        ca (trustme.CA): The authority the client context trusts.
-        now (datetime): The test's time.
-        valid_for (timedelta): From ``now`` to the expiry; negative for an expired leaf.
-
-    Returns:
-        trustme.LeafCert: The leaf, valid since 30 days before ``now``.
-    """
-    return ca.issue_cert(
-        "localhost", not_before=now - timedelta(days=30), not_after=now + valid_for
-    )
-
-
-def _serve_registry(server: LocalHTTPServer, answers: dict[str, datetime]) -> str:
-    """
-    Serve the bootstrap and one dated answer per domain on ``server``.
-
-    Args:
-        server (LocalHTTPServer): The running server.
-        answers (dict[str, datetime]): From each domain under ``com`` to its expiration; the
-            record is ``example.com.json`` with its name and its events replaced.
-
-    Returns:
-        str: The URL of the bootstrap.
-    """
-    bootstrap = {
-        "version": "1.0",
-        "publication": "2026-11-27T00:00:00Z",
-        "services": [[["com"], [server.url(BASE_PATH)]]],
-    }
-    server.routes[BOOTSTRAP_PATH] = Route(
-        200, json.dumps(bootstrap).encode(), {"Content-Type": "application/json"}
-    )
-    for domain, expires in answers.items():
-        record = json.loads((DATA / "example.com.json").read_bytes())
-        record["ldhName"] = domain.upper()
-        record["events"] = [
-            {"eventAction": "expiration", "eventDate": expires.strftime("%Y-%m-%dT%H:%M:%SZ")}
-        ]
-        server.routes[f"{BASE_PATH}domain/{domain}"] = Route(
-            200, json.dumps(record).encode(), {"Content-Type": "application/rdap+json"}
-        )
-    return server.url(BOOTSTRAP_PATH)
 
 
 def _config(hosts: tuple[HostEntry, ...] = (), domains: tuple[DomainEntry, ...] = ()) -> Config:
@@ -124,10 +61,10 @@ def test_the_items_keep_the_order_of_the_configuration(
     client_context: ssl.SSLContext,
     https_server: LocalHTTPServer,
 ) -> None:
-    now = _now()
-    expired = serve(_leaf(ca, now, timedelta(days=-1)))
-    valid = serve(_leaf(ca, now, timedelta(days=90)))
-    bootstrap_url = _serve_registry(https_server, {"example.com": now + timedelta(days=300)})
+    now = runs.now()
+    expired = serve(leaf(ca, now, timedelta(days=-1)))
+    valid = serve(leaf(ca, now, timedelta(days=90)))
+    bootstrap_url = serve_registry(https_server, {"example.com": now + timedelta(days=300)})
     config = _config(
         hosts=(HostEntry("localhost", expired.port, 14), HostEntry("localhost", valid.port, 14)),
         domains=(DomainEntry("example.org", 30), DomainEntry("example.com", 30)),
@@ -164,9 +101,9 @@ def test_each_entry_is_classified_against_its_own_threshold(
     client_context: ssl.SSLContext,
     https_server: LocalHTTPServer,
 ) -> None:
-    now = _now()
-    server = serve(_leaf(ca, now, timedelta(days=30, hours=1)))  # 30 days left
-    bootstrap_url = _serve_registry(
+    now = runs.now()
+    server = serve(leaf(ca, now, timedelta(days=30, hours=1)))  # 30 days left
+    bootstrap_url = serve_registry(
         https_server,
         {
             "first.com": now + timedelta(days=30, hours=1),
@@ -192,9 +129,9 @@ def test_a_run_without_domains_sends_nothing_to_the_bootstrap(
     client_context: ssl.SSLContext,
     https_server: LocalHTTPServer,
 ) -> None:
-    now = _now()
-    server = serve(_leaf(ca, now, timedelta(days=90)))
-    bootstrap_url = _serve_registry(https_server, {})
+    now = runs.now()
+    server = serve(leaf(ca, now, timedelta(days=90)))
+    bootstrap_url = serve_registry(https_server, {})
 
     report = run(
         _config(hosts=(HostEntry("localhost", server.port, 14),)),
@@ -212,8 +149,8 @@ def test_a_run_with_one_domain_fetches_the_bootstrap_once(
     client_context: ssl.SSLContext, https_server: LocalHTTPServer
 ) -> None:
     """Control for the test above: the same server records the bootstrap when a domain needs it."""
-    now = _now()
-    bootstrap_url = _serve_registry(https_server, {})
+    now = runs.now()
+    bootstrap_url = serve_registry(https_server, {})
 
     report = run(
         _config(domains=(DomainEntry("example.org", 30),)),

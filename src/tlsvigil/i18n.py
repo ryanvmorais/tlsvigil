@@ -396,6 +396,32 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
         Lang.EN: "nothing to check: no host and no domain is listed",
         Lang.PT_BR: "nada a verificar: nenhum host e nenhum domínio listado",
     },
+    # The command (RF-02, RF-03; ADR-3): the headings of a configuration error, the hint of a
+    # missing default file, and the line before the traceback of a bug.
+    "cli.file_heading": {
+        Lang.EN: "Nothing was checked: the configuration {path} cannot be used.",
+        Lang.PT_BR: "Nada foi verificado: a configuração {path} não pode ser usada.",
+    },
+    "cli.names_heading": {
+        Lang.EN: "Nothing was checked: the names given with --host and --domain cannot be used.",
+        Lang.PT_BR: (
+            "Nada foi verificado: os nomes passados com --host e --domain não podem ser usados."
+        ),
+    },
+    "cli.missing_hint": {
+        Lang.EN: (
+            "Name what to check with --host HOST[:PORT] or --domain NAME, "
+            "or write a {path} file in this directory."
+        ),
+        Lang.PT_BR: (
+            "Diga o que verificar com --host HOST[:PORTA] ou --domain NOME, "
+            "ou crie um arquivo {path} nesta pasta."
+        ),
+    },
+    "cli.internal_error": {
+        Lang.EN: "tlsvigil: internal error; this is a bug, please report it with the text below.",
+        Lang.PT_BR: "tlsvigil: erro interno; isto é um defeito, informe-o com o texto abaixo.",
+    },
 }
 
 

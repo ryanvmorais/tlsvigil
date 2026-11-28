@@ -568,6 +568,11 @@ brackets are the only way to give a port to an IPv6 address.
 4. **RF-04: a table or a list of the wrong type counts as written.** `certificates = 1` or
    `hosts = "example.com"` gives its own problem without "nothing to check" beside it; that
    problem stays for a file with no table, or with empty lists only.
+5. **RF-03: `--config` and the names are refused together after parsing, not by a group.** An
+   `argparse` mutually exclusive group makes every member exclusive with every other, so `--host`
+   with `--domain` would be refused too, and nested groups are deprecated since Python 3.11.
+   `main` checks the clash after parsing and calls `error()` on the `check` parser, which prints
+   the usage of `check` and exits `2`, as the group would.
 
 ## Implementation notes
 
@@ -609,3 +614,16 @@ brackets are the only way to give a port to an IPv6 address.
   without domains (4 red), `Cf` removed from `printable()` (5 red), `ensure_ascii=False` (1 red),
   the `message` key left out of an error item (1 red), the singular key for every count (10 red),
   and the name cut at 40 characters (1 red).
+- **Stage 3:** a configuration error is written under one heading (`cli.file_heading`, naming
+  the file, or `cli.names_heading` for the flags), one problem per line as `place: sentence`,
+  the place and every value through `printable()`; the hint (`cli.missing_hint`) follows only a
+  missing default file, since a path given by hand was meant to exist. The language of a crash
+  is the flag's, else the file's once it loaded, else `en`. The test of a legacy code page writes
+  the Japanese text in an error message, because the text line carries no issuer (Stage 2); the
+  tests of the streams and of a crash replace `run` with a report of `tests/reports.py`, so they
+  open nothing. The clock, the leaves and the registry of `test_runner.py` moved to
+  `tests/runs.py`, which both files use. Seen failing (each change undone): the language
+  precedence swapped (2 red), `except Exception` narrowed (2 red), the clash check removed (2
+  red), `errors="strict"` on the streams (1 red), the file read before the names (12 red), the
+  problems written to the standard output (9 red), the hint for any path (1 red), the place left
+  unescaped (1 red), and the `dup2` to `os.devnull` removed (2 red).
