@@ -22,8 +22,9 @@ needs no server: it runs on a daily schedule in a GitHub repository of yours, on
 Actions minutes, and opens an issue there when something needs attention.
 
 > **Status:** in development, not released yet; the first release will be `1.0.0`. This README
-> describes the tool as it is specified in [specs/](specs/). Until the first release, only
-> `tlsvigil --version` runs.
+> describes the tool as it is specified in [specs/](specs/). Today `tlsvigil check` runs from a
+> clone and prints the result; the GitHub issue, Telegram, e-mail and the Action are specified but
+> not built yet.
 
 ## What it checks
 
@@ -66,9 +67,85 @@ git clone https://github.com/ryanvmorais/tlsvigil.git
 cd tlsvigil
 uv sync
 
-# Check that the command runs (the only command that exists so far)
-uv run tlsvigil --version
+# Check one host and one domain, without a configuration file
+uv run tlsvigil check --host example.com --domain example.com
 ```
+
+Each name gets one line, and a last line sums up the run:
+
+```text
+OK        example.com:443  certificate expires in 86 days (2027-02-22)
+OK        example.com      domain expires in 258 days (2027-08-13)
+
+2 checked: 0 need attention.
+```
+
+To watch your own list, write it in a `tlsvigil.toml` file (next section) and run
+`uv run tlsvigil check` in the same directory.
+
+## Configuration
+
+`tlsvigil check` reads `tlsvigil.toml` in the current directory, or the file named by
+`--config PATH`. A commented example:
+
+```toml
+# Optional: "en" (default) or "pt-BR".
+lang = "en"
+# Optional: seconds for each TLS connection and each RDAP request (default 10).
+timeout = 10
+
+[certificates]
+# Warn when fewer days than this are left (default 14).
+warn_days = 14
+hosts = [
+  "example.com",                                  # port 443
+  "mail.example.com:465",
+  "[2001:db8::1]:8443",
+  { host = "legacy.example.com", warn_days = 30 },
+]
+
+[domains]
+# Warn when fewer days than this are left (default 30).
+warn_days = 30
+names = ["example.com", "example.com.br"]
+```
+
+| Key | Default | What it holds |
+|---|---|---|
+| `lang` | `"en"` | The language of the text output and of the error messages: `"en"` or `"pt-BR"` |
+| `timeout` | `10` | The seconds each TLS connection and each RDAP request may take, greater than `0` |
+| `certificates.warn_days` | `14` | Warn when a certificate has fewer days left than this (`0` or more) |
+| `certificates.hosts` | none | The hosts to check: `"host"` (port 443), `"host:port"`, `"[IPv6]:port"`, or a table `{ host, port, warn_days }` |
+| `domains.warn_days` | `30` | Warn when a domain registration has fewer days left than this (`0` or more) |
+| `domains.names` | none | The domains to check, or a table `{ name, warn_days }`. Write each domain as registered (`example.com`, not `www.example.com`), and an internationalized name in its `xn--` form |
+
+An entry's own `warn_days` wins over its table's. The whole file is checked before any connection:
+an unknown key (a typo such as `warn_day`), a value of the wrong type, a host or a domain listed
+twice, or a file with nothing to check stops the run, and each problem is printed with its place
+(such as `certificates.hosts[2]`).
+
+## Command line
+
+```text
+tlsvigil check [--config PATH | --host HOST[:PORT]... --domain NAME...] [--json] [--lang en|pt-BR]
+```
+
+| Option | What it does |
+|---|---|
+| `--config PATH` | Reads this file instead of `tlsvigil.toml` |
+| `--host HOST[:PORT]` | Checks the certificate of this host instead of reading a file; repeat it for more hosts |
+| `--domain NAME` | Checks the registration of this domain instead of reading a file; repeat it for more domains |
+| `--json` | Writes one JSON document (schema version `1`) with every result and a count per status, with the same English keys and values in any language |
+| `--lang en\|pt-BR` | The language of the text output; it wins over the `lang` of the file |
+
+The exit code tells a script what happened:
+
+| Code | Meaning |
+|---|---|
+| `0` | Every result is `ok`, or `unknown` (a domain with no RDAP service or no date) |
+| `1` | At least one result needs attention: `expiring`, `invalid` (a certificate that fails verification) or `error` (the check could not finish) |
+| `2` | Nothing was checked: a usage error, a configuration error, or nothing to check |
+| `3` | An internal error (a bug); the traceback is on the standard error |
 
 ## TLSVigil vs. other tools
 
