@@ -32,8 +32,8 @@ o token do próprio workflow.
 
 | Execução | Significado |
 |---|---|
-| Verde | Todas as verificações foram feitas e todas as notificações entregues; um aviso fica na issue. |
-| Vermelha | Uma verificação não pôde rodar (um erro no `tlsvigil.toml`, por exemplo) ou uma notificação não foi entregue; o resumo da execução diz qual. |
+| Verde | As verificações rodaram e todas as notificações foram entregues; um aviso, entre eles um host que não respondeu, fica na issue. |
+| Vermelha | Nada pôde ser conferido (um erro no `tlsvigil.toml`, por exemplo), uma notificação não foi entregue ou o TLSVigil encontrou um bug; o resumo da execução diz qual. |
 
 Um certificado perto de vencer é uma issue, não uma execução vermelha; então uma execução vermelha
 sempre quer dizer que a própria verificação precisa de você.

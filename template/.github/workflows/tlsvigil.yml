@@ -1,8 +1,8 @@
 # TLSVigil: checks the certificates and domains of tlsvigil.toml every day and keeps one issue of
 # this repository up to date with what needs attention. Run by GitHub Actions on the schedule, by
 # hand (Actions → TLSVigil → Run workflow) and on a push to main that changes tlsvigil.toml.
-# The run is red when a check could not be made or a notification was not delivered; a warning
-# alone is an issue, not a red run.
+# The run is red when nothing could be checked or a notification was not delivered; a warning,
+# a host that could not be reached among them, is an issue, not a red run.
 name: TLSVigil
 
 on:
