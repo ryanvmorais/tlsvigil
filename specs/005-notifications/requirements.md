@@ -1,6 +1,6 @@
 ---
 feature: The notifications — one GitHub issue, Telegram and e-mail, sent on change and at reminders, never twice for the same thing
-status: approved
+status: done
 date: 2026-11-27
 related:
   - 001-foundation/design.md

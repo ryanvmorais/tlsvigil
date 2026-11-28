@@ -14,8 +14,8 @@ workflow's `GITHUB_TOKEN`; Telegram and SMTP are optional.
 Not released yet (version `1.0.0.dev0`; the first release will be `1.0.0`, and the `v0.x` milestones
 of the build are in the roadmap of [specs/README.md](specs/README.md)). Today the CLI runs `tlsvigil
 check` (the checks of a `tlsvigil.toml` or of `--host`/`--domain`, printed as text or JSON, with
-exit codes); the issue, the notifications and the Action are not built yet. Everything is specified
-in [specs/](specs/) first. The repository has been public since day zero; releasing and announcing
+exit codes) and, with `--notify`, delivers the result to the GitHub issue, Telegram and e-mail; the
+Action is not built yet. Everything is specified in [specs/](specs/) first. The repository has been public since day zero; releasing and announcing
 are the maintainer's acts.
 
 Everything in the repository is English, except `README.pt-BR.md` (see Conventions).
@@ -26,10 +26,14 @@ Everything in the repository is English, except `README.pt-BR.md` (see Conventio
 # Create/update the environment from pyproject.toml + uv.lock (includes the dev group)
 uv sync
 
-# Run the CLI from the source tree (exit 0 all fine, 1 needs attention, 2 nothing checked, 3 bug)
+# Run the CLI from the source tree (exit 0 all fine, 1 needs attention, 2 nothing checked, 3 bug,
+# 4 a notification not delivered)
 uv run tlsvigil --version
 uv run tlsvigil check --host example.com --domain example.com
 uv run tlsvigil check --config tlsvigil.local.toml --json --lang pt-BR
+
+# Deliver to the channels of [notifications] (their variables below must be set)
+uv run tlsvigil check --config tlsvigil.local.toml --notify --state .tlsvigil-state.json
 
 # Run the tests (one file, then one test)
 uv run pytest
@@ -54,15 +58,28 @@ uv build
 
 ## Environment variables
 
-None yet. Configuration is a TOML file, `tlsvigil.toml` or `--config PATH` (spec 004); secrets (a
-Telegram bot token, an SMTP password) come from the CI's secret store, never from a file in the
-repository. A local `tlsvigil.local.toml` and `.env` are ignored.
+Configuration is a TOML file, `tlsvigil.toml` or `--config PATH` (spec 004). With `--notify`, the
+channels listed in `[notifications]` read their secrets and addresses from the environment (spec
+005, RF-03), and only those channels' variables are read; a key in the file that looks like one of
+them is a configuration error.
+
+| Variable | Channel | Form |
+|---|---|---|
+| `GITHUB_TOKEN` | `github` | the workflow's token, with `permissions: issues: write` |
+| `GITHUB_REPOSITORY` | `github` | `owner/name`; set by GitHub Actions |
+| `TLSVIGIL_TELEGRAM_TOKEN` | `telegram` | `<digits>:<letters, digits, _ and ->` |
+| `TLSVIGIL_TELEGRAM_CHAT_ID` | `telegram` | an integer, possibly negative, or `@name` |
+| `TLSVIGIL_SMTP_USERNAME`, `TLSVIGIL_SMTP_PASSWORD` | `smtp` | no control character |
+| `TLSVIGIL_SMTP_FROM`, `TLSVIGIL_SMTP_TO` | `smtp` | one bare address; one or more, separated by commas |
+
+In CI they come from the secret store, never from a file in the repository. A local
+`tlsvigil.local.toml`, `.env` and the default state file `.tlsvigil-state.json` are ignored.
 
 ## Architecture
 
 ```text
 src/tlsvigil/       # the package: __main__.py (python -m tlsvigil),
-                    #   cli.py (argparse, the check sub-command, the exit codes 0 to 3)
+                    #   cli.py (argparse, check and --notify, exit codes 0 to 4, the Redactor)
                     #   config.py (tlsvigil.toml or the flags → a validated Config, every problem)
                     #   runner.py (run(): the checks in order, one shared RdapClient → a Report)
                     #   output.py (render_text(), render_json(), printable() for outside text)
@@ -100,8 +117,10 @@ uv.lock             # never edit by hand (generated; a hook blocks it)
 
 `tlsvigil check` (spec 004) loads and validates the whole configuration before any connection,
 runs the certificate checks (spec 002) and then the domain checks over RDAP (spec 003), and
-renders the report. The specs to come add, in this order: the notifications without duplicates
-(005) and the composite Action in `action.yml` (006).
+renders the report. With `--notify` (spec 005), it also reads the channels' settings from the
+environment before any check, and after the run `notify()` loads the state, asks `alerts.py` what
+each channel has to hear, delivers, and saves the state once. The composite Action in `action.yml`
+(spec 006) is not built yet.
 
 ### Before you touch…
 
@@ -121,11 +140,12 @@ renders the report. The specs to come add, in this order: the notifications with
 | `src/tlsvigil/mail.py` (the session, a failure) | spec `005` (RF-10, ADR-6); `getreply` is copied from `smtplib` and must follow it; STARTTLS is required, never opportunistic |
 | `tests/smtp_server.py` | spec `005` (ADR-11); it offers `AUTH` in clear on purpose, so a client that skips STARTTLS is caught |
 | `src/tlsvigil/environment.py` (a variable, a form, the Redactor) | spec `005` (RF-03, ADR-7, ADR-10); `config.py` names the same variables in its secret-like keys |
-| `src/tlsvigil/cli.py` (flags, exit codes, streams) | spec `004` (ADR-3 on exit `3`, ADR-7 on the test seams, deviation 5 on `--config` with `--host`) |
+| `src/tlsvigil/notify.py` (the order, the state, a channel's failure) | spec `005` (RF-01, RF-07, ADR-2; deviation 4 on `warn`); the state is saved once, in a `finally` |
+| `src/tlsvigil/cli.py` (flags, exit codes, streams) | spec `004` (ADR-3 on exit `3`, ADR-7 on the test seams, deviation 5 on `--config` with `--host`); spec `005` (ADR-7 on the Redactor over every stream, ADR-9 on the new seams, exit `4`) |
 | `src/tlsvigil/config.py` (keys, defaults, places) | spec `004` (ADR-2 on the validators' codes, ADR-6 on the size cap, ADR-8 on host forms); both READMEs show the keys |
-| `src/tlsvigil/output.py`, the JSON shape | spec `004` (ADR-4 on escaping outside text, ADR-5 on the JSON schema version) |
+| `src/tlsvigil/output.py`, the JSON shape | spec `004` (ADR-4 on escaping outside text, ADR-5 on the JSON schema version); spec `005` (RF-12) for the delivery lines and the `notifications` key |
 | `src/tlsvigil/i18n.py` (a sentence or a key) | spec `004` (ADR-1); `tests/test_i18n.py` fails when a language or a key is missing |
-| `README.md` or `README.pt-BR.md` | the two READMEs rule below, `tests/test_readme_pt_br.py` and `tests/test_readme_config.py` |
+| `README.md` or `README.pt-BR.md` | the two READMEs rule below, `tests/test_readme_pt_br.py` (headings and table rows, the variables too) and `tests/test_readme_config.py` (the one `toml` block, `[notifications]` included) |
 | `.github/workflows/` | the comments at the top of each workflow; the ruleset requires the `Quality` checks by name |
 
 ### Do not regress

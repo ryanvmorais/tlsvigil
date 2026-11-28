@@ -1,6 +1,6 @@
 ---
 feature: The notifications — one GitHub issue, Telegram and e-mail, sent on change and at reminders, never twice for the same thing
-status: approved
+status: done
 date: 2026-11-27
 related:
   - 005-notifications/requirements.md
@@ -213,17 +213,17 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 6 — Documentation and the close of the spec
 
-- [ ] `README.md` and `README.pt-BR.md`: `--notify` and `--state`, the `[notifications]` table in
+- [x] `README.md` and `README.pt-BR.md`: `--notify` and `--state`, the `[notifications]` table in
   the example file and in the keys, the eight variables, `permissions: issues: write`, when a
   channel hears about a warning (the changes, the reminder days, `error` from its second run,
   `unknown` never), and the exit code `4`; `tests/test_readme_pt_br.py`,
   `tests/test_readme_config.py` and `tests/test_readme_links.py` pass. — RF-13
-- [ ] `CLAUDE.md`: the commands, the environment variables, the architecture with the new modules
+- [x] `CLAUDE.md`: the commands, the environment variables, the architecture with the new modules
   and test servers, the "Before you touch" rows for the channels, the state and `https.py`. — RF-13
-- [ ] `docs/stack.md`: `smtplib`, `email`, `os.replace` and the shared HTTPS exchange in use; the
+- [x] `docs/stack.md`: `smtplib`, `email`, `os.replace` and the shared HTTPS exchange in use; the
   diagram updated. — RF-13
-- [ ] `specs/005-notifications/`: `status: done` in the three files, the deviations and the
+- [x] `specs/005-notifications/`: `status: done` in the three files, the deviations and the
   implementation notes recorded; `specs/README.md`: the roadmap row with the delivery `v0.5` and
   the status `done`; the traceability check (every RF, RNF and ADR cited exists, every RF has a
   task). — RF-13
-- [ ] Quality gate. —
+- [x] Quality gate. — ruff, black, mypy and pytest green (1413 tests, 99% coverage)
