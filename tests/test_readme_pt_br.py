@@ -124,8 +124,15 @@ def test_both_readmes_have_the_same_comparison_rows() -> None:
 
 @pytest.mark.parametrize(
     ("portuguese", "english"),
-    [("Chave", "Key"), ("Opção", "Option"), ("Código", "Code"), ("Variável", "Variable")],
-    ids=["keys", "options", "exit-codes", "variables"],
+    [
+        ("Chave", "Key"),
+        ("Opção", "Option"),
+        ("Código", "Code"),
+        ("Variável", "Variable"),
+        ("Entrada", "Input"),
+        ("Saída", "Output"),
+    ],
+    ids=["keys", "options", "exit-codes", "variables", "action-inputs", "action-outputs"],
 )
 @_needs_both
 def test_both_readmes_have_the_same_rows_in_the_command_tables(

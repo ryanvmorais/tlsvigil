@@ -1,6 +1,6 @@
 ---
 feature: The GitHub Action and the template repository — a daily check in the user's own repository, with no server and no secret to start
-status: in progress
+status: done
 date: 2026-11-28
 related:
   - 001-foundation/design.md
@@ -529,3 +529,21 @@ restored: a `pull_request` trigger (2 tests red), `cancel-in-progress: true` (1)
 (1), a key the configuration does not know (1), a heading missing from the Portuguese README (1), a
 table row missing from it (1), a personal command in the English README (1). Gate: 1529 tests, 99%
 coverage.
+
+**Stage 4.** The `## GitHub Actions` section in both READMEs, its workflow block the template's
+file word for word and its tables one row per input and output of `action.yml`; 6 more tests in
+`tests/test_action_files.py` (the block and the two tables, in each README) and 2 more rows in
+`tests/test_readme_pt_br.py`. The template's sentence on a red run said "a check could not run",
+but a host that cannot be reached ends as `error`, exit `1`, a green run; the workflow's comment and
+the template's READMEs now say "nothing could be checked", which is exit `2`. Each guard was seen
+failing once, then restored: the cron changed in the English block (1 test red), an input row
+removed from the Portuguese table (2), two input rows swapped in the English table (1), the output
+renamed (1). Gate: 1537 tests, 99% coverage.
+
+By hand, on 2026-11-28, in a private scratch repository holding the template's files pinned to
+`3a6171c` (`# main`), with `warn_days = 3650` on `example.com` to force a warning: the first run,
+started by the push of `tlsvigil.toml`, missed the cache, opened issue #1 ("1 entry needs
+attention") and saved the state; the second, started by hand, restored the first run's entry,
+reported `github: nothing new (issue #1)` and left the issue without a comment. Both were green,
+each step took a few seconds, and the run's page showed the report fenced in the summary, with the
+delivery line.

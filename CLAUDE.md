@@ -15,8 +15,8 @@ Not released yet (version `1.0.0.dev0`; the first release will be `1.0.0`, and t
 of the build are in the roadmap of [specs/README.md](specs/README.md)). Today the CLI runs `tlsvigil
 check` (the checks of a `tlsvigil.toml` or of `--host`/`--domain`, printed as text or JSON, with
 exit codes) and, with `--notify`, delivers the result to the GitHub issue, Telegram and e-mail; the
-composite Action in `action.yml` runs that command in a workflow, and the template repository is not
-built yet. Everything is specified in [specs/](specs/) first. The repository has been public since day zero; releasing and announcing
+composite Action in `action.yml` runs that command in a workflow, and `template/` holds the files of
+the template repository, which is not published yet. Everything is specified in [specs/](specs/) first. The repository has been public since day zero; releasing and announcing
 are the maintainer's acts.
 
 Everything in the repository is English, except `README.pt-BR.md` (see Conventions).
@@ -108,6 +108,7 @@ tests/              # pytest; the CLI is driven through main(argv), and the docs
   fake_apis.py      # FakeGitHub and FakeTelegram: state in memory, headers and token checked
   smtp_server.py    # LocalSMTPServer: TLS or STARTTLS, AUTH, the commands recorded, misbehaving modes
   data/rdap/        # the hand-written RDAP answers the tests read and serve
+  data/action/      # the configurations the CI "Action" job runs (a closed loopback port)
   certs.py          # the test certificates trustme does not make (self-signed, no AKI)
 specs/              # spec-driven development: requirements → design → tasks per feature
 docs/               # stack.md: each technology and why it was chosen
@@ -115,6 +116,8 @@ docs/               # stack.md: each technology and why it was chosen
 .claude/            # Claude Code hooks: format on edit, validate at turn end, guard uv.lock
 .github/            # CI, CodeQL, dependency review, weekly pip-audit, Dependabot, templates
 action.yml          # the composite Action: restore the state, run action.py, save the state
+template/           # the template repository's files: tlsvigil.toml, the daily workflow pinned
+                    #   to this Action, Dependabot, README.md and README.pt-BR.md
 uv.lock             # never edit by hand (generated; a hook blocks it)
 ```
 
@@ -125,7 +128,9 @@ environment before any check, and after the run `notify()` loads the state, asks
 each channel has to hear, delivers, and saves the state once. The composite Action in `action.yml`
 (spec 006) runs the source of its own commit with the runner's Python 3.12 or later, installs
 nothing, passes every input as a `TLSVIGIL_INPUT_*` variable to `tlsvigil.action`, which calls the
-command's `main()`, and keeps the state in the Actions cache between runs.
+command's `main()`, and keeps the state in the Actions cache between runs. The template's workflow
+(`template/.github/workflows/tlsvigil.yml`) pins the Action by SHA, and both READMEs show it word
+for word.
 
 ### Before you touch…
 
@@ -150,8 +155,9 @@ command's `main()`, and keeps the state in the Actions cache between runs.
 | `src/tlsvigil/config.py` (keys, defaults, places) | spec `004` (ADR-2 on the validators' codes, ADR-6 on the size cap, ADR-8 on host forms); both READMEs show the keys |
 | `src/tlsvigil/output.py`, the JSON shape | spec `004` (ADR-4 on escaping outside text, ADR-5 on the JSON schema version); spec `005` (RF-12) for the delivery lines and the `notifications` key |
 | `src/tlsvigil/i18n.py` (a sentence or a key) | spec `004` (ADR-1); `tests/test_i18n.py` fails when a language or a key is missing |
-| `README.md` or `README.pt-BR.md` | the two READMEs rule below, `tests/test_readme_pt_br.py` (headings and table rows, the variables too) and `tests/test_readme_config.py` (the one `toml` block, `[notifications]` included) |
-| `action.yml` or `src/tlsvigil/action.py` | spec `006` (ADR-1 to ADR-5, ADR-8); `tests/test_action_files.py` holds the inputs to `action.INPUTS`, every `uses:` to a SHA, no `${{` in a `run:` |
+| `README.md` or `README.pt-BR.md` | the two READMEs rule below, `tests/test_readme_pt_br.py` (headings and table rows, the variables and the Action's inputs too), `tests/test_readme_config.py` (the one `toml` block, `[notifications]` included) and `tests/test_action_files.py` (the workflow block and the inputs and output tables) |
+| `action.yml` or `src/tlsvigil/action.py` | spec `006` (ADR-1 to ADR-5, ADR-8); `tests/test_action_files.py` holds the inputs to `action.INPUTS`, every `uses:` to a SHA, no `${{` in a `run:`; an input added or renamed changes the inputs table of both READMEs |
+| `template/` (the workflow, `tlsvigil.toml`, its READMEs) | spec `006` (RF-08, RF-09, ADR-7; deviations 6 and 7); a change to the workflow is copied into the `## GitHub Actions` block of both READMEs, which `tests/test_action_files.py` compares word for word |
 | `.github/workflows/` | the comments at the top of each workflow; the ruleset requires the `Quality` checks by name |
 
 ### Do not regress
@@ -198,7 +204,10 @@ command's `main()`, and keeps the state in the Actions cache between runs.
   `.github/workflows/ci.yml`. The repository allows squash merges only, and the `proteger-main`
   ruleset requires a pull request, linear history and the `Quality (Python 3.12)` and
   `Quality (Python 3.15)` checks; `pip-audit`, CodeQL and dependency review are not required, so a
-  new CVE cannot block the PR that fixes it.
+  new CVE cannot block the PR that fixes it. The CI also runs a `package` job (build, `twine check`,
+  no runtime dependency) and an `Action` job, which runs `uses: ./` five times on Linux, Windows and
+  macOS against `tests/data/action/` and compares each outcome and `exit-code`; neither is required
+  by the ruleset.
 - **Claude Code hooks** (`.claude/`, run with `python`): `project_format` (PostToolUse: ruff
   `--fix` + black on the edited `.py`), `validate` (Stop: ruff + mypy when a `.py` changed; pytest
   is left to the pre-commit hook), `guard_generated` (PreToolUse: blocks editing `uv.lock`),

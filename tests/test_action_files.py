@@ -5,12 +5,13 @@ RNF-01, RNF-02, RNF-06; ADR-2, ADR-6, ADR-7).
 ``action.yml`` and the template's workflow are read with :func:`yaml.safe_load` for their structure
 and as text for what the parser drops: the version comment after each pinned ``uses:`` and the
 commented channel inputs. The template's ``tlsvigil.toml`` is loaded like any configuration, and
-its two READMEs are compared by shape. The bootstrap of the Check step is
-taken from the file itself and run in a subprocess, from a directory that holds a planted
-``json.py``, so the test runs the very line a runner runs. Isolation: only the repository's files
-are read; the subprocess stops at the inputs, before any check, so nothing reaches the network.
-When the tests run from a tree without ``action.yml`` (an sdist, which has no ``template/``
-either), they are skipped.
+its two READMEs are compared by shape. The READMEs of this repository are held to both files: the
+workflow they show is the template's, and their tables name the inputs and the output of
+``action.yml``. The bootstrap of the Check step is taken from the file itself and run in a
+subprocess, from a directory that holds a planted ``json.py``, so the test runs the very line a
+runner runs. Isolation: only the repository's files are read; the subprocess stops at the inputs,
+before any check, so nothing reaches the network. When the tests run from a tree without
+``action.yml`` (an sdist, which has no ``template/`` either), they are skipped.
 """
 
 from __future__ import annotations
@@ -40,6 +41,8 @@ _SOURCE = _ROOT / "src"
 _DATA = Path(__file__).resolve().parent / "data" / "action"
 _TEMPLATE = _ROOT / "template"
 _WORKFLOW = _TEMPLATE / ".github" / "workflows" / "tlsvigil.yml"
+# The two READMEs of this repository, each with a "GitHub Actions" section (RF-11).
+_READMES = {"en": _ROOT / "README.md", "pt-BR": _ROOT / "README.pt-BR.md"}
 
 # Every test below reads action.yml, so the mark is shared.
 pytestmark = pytest.mark.skipif(
@@ -67,6 +70,12 @@ _OFFERED = re.compile(r"^\s*#\s+([a-z-]+): \$\{\{ secrets\.([A-Z_]+) \}\}$", re.
 
 # An ATX heading; the run of "#" is its level.
 _HEADING = re.compile(r"^(#{1,6}) ")
+
+# The first cell of a table row that names an input or an output: its name in backticks.
+_NAMED_ROW = re.compile(r"^\| `([a-z-]+)` \|")
+
+# The first header cell of the inputs and of the output table, in each README's language.
+_TABLE_HEADERS = {"en": ("Input", "Output"), "pt-BR": ("Entrada", "Saída")}
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -476,3 +485,73 @@ def test_both_template_readmes_have_the_same_table() -> None:
     english = _table_lines(_TEMPLATE / "README.md")
     assert english > 2
     assert _table_lines(_TEMPLATE / "README.pt-BR.md") == english
+
+
+# ---------------------------------------------------------------------------
+# The READMEs of this repository (RF-11, RF-12)
+# ---------------------------------------------------------------------------
+
+
+def _yaml_blocks(path: Path) -> list[str]:
+    """
+    Collect the fenced YAML blocks of a Markdown file.
+
+    Args:
+        path (Path): The Markdown file.
+
+    Returns:
+        list[str]: The text of each block, without its fences, every line ending in a newline.
+    """
+    blocks: list[str] = []
+    current: list[str] | None = None
+    for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+        if current is None:
+            if line.rstrip("\n") == "```yaml":
+                current = []
+        elif line.startswith("```"):
+            blocks.append("".join(current))
+            current = None
+        else:
+            current.append(line)
+    return blocks
+
+
+def _named_rows(path: Path, first_cell: str) -> list[str]:
+    """
+    Give the names in the first column of the table whose header starts with a given cell.
+
+    Args:
+        path (Path): The Markdown file.
+        first_cell (str): The text of the first header cell.
+
+    Returns:
+        list[str]: The backticked name of each data row, in order; a row without one ends the
+            list, so that it shows up as a difference.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"| {first_cell} |"))
+    names: list[str] = []
+    for line in lines[start + 2 :]:
+        match = _NAMED_ROW.match(line)
+        if not match:
+            break
+        names.append(match.group(1))
+    return names
+
+
+@pytest.mark.parametrize("lang", list(_READMES))
+def test_the_readme_workflow_is_the_templates_word_for_word(lang: str) -> None:
+    blocks = [block for block in _yaml_blocks(_READMES[lang]) if f"uses: {_OWN}@" in block]
+    assert blocks == [_WORKFLOW.read_text(encoding="utf-8")]
+
+
+@pytest.mark.parametrize("lang", list(_READMES))
+def test_the_readme_inputs_table_names_every_input_in_order(lang: str) -> None:
+    header = _TABLE_HEADERS[lang][0]
+    assert tuple(_named_rows(_READMES[lang], header)) == INPUTS
+
+
+@pytest.mark.parametrize("lang", list(_READMES))
+def test_the_readme_output_table_names_every_output(lang: str) -> None:
+    header = _TABLE_HEADERS[lang][1]
+    assert _named_rows(_READMES[lang], header) == list(_action()["outputs"])

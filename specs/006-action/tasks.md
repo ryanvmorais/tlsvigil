@@ -1,6 +1,6 @@
 ---
 feature: The GitHub Action and the template repository — a daily check in the user's own repository, with no server and no secret to start
-status: in progress
+status: done
 date: 2026-11-28
 related:
   - 006-action/requirements.md
@@ -136,22 +136,22 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 4 — Documentation, the check by hand and the close of the spec
 
-- [ ] `README.md` and `README.pt-BR.md`: the `## GitHub Actions` section of the design, its
+- [x] `README.md` and `README.pt-BR.md`: the `## GitHub Actions` section of the design, its
   workflow equal to the template's, the inputs table equal to `action.yml`, the watch setting ("All
   Activity"; "Custom → Issues" for a busy repository) and the limits of the platform;
   `tests/test_readme_pt_br.py` compares the new tables, and `tests/test_action_files.py` checks the
   workflow block and the inputs rows of both; `tests/test_readme_config.py` and
   `tests/test_readme_links.py` pass. — RF-11, RF-12
-- [ ] `CLAUDE.md`: the overview (the Action is built), the architecture with `action.yml`,
+- [x] `CLAUDE.md`: the overview (the Action is built), the architecture with `action.yml`,
   `action.py` and `template/`, the "Before you touch" rows for them, and the quality line for the
   "Action" job. — RF-11
-- [ ] `docs/stack.md`: the composite Action and the Actions cache in use, PyYAML among the dev
+- [x] `docs/stack.md`: the composite Action and the Actions cache in use, PyYAML among the dev
   tools. — RF-11
-- [ ] By hand, in a scratch repository: the template's files, pinned to the commit of `main`; two
+- [x] By hand, in a scratch repository: the template's files, pinned to the commit of `main`; two
   runs: the issue opened on the first and commented on or left alone on the second, the state
   restored on the second, the summary read on the run's page; the result recorded in the
   implementation notes. — RF-01, RF-05, RF-06, RF-09
-- [ ] `specs/006-action/`: `status: done` in the three files, the deviations and the implementation
+- [x] `specs/006-action/`: `status: done` in the three files, the deviations and the implementation
   notes recorded; `specs/README.md`: the roadmap row with the delivery `v0.6` and the status `done`;
   the traceability check (every RF, RNF and ADR cited exists, every RF has a task). — RF-11
-- [ ] Quality gate. —
+- [x] Quality gate. — ruff, black, mypy and pytest green (1537 tests, 99% coverage)

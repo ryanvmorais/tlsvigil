@@ -31,8 +31,8 @@ with the workflow's own token.
 
 | Run | Meaning |
 |---|---|
-| Green | Every check was made and every notification delivered; a warning is in the issue. |
-| Red | A check could not run (a mistake in `tlsvigil.toml`, for one) or a notification was not delivered; the run's summary says which. |
+| Green | The checks ran and every notification was delivered; a warning, a host that could not be reached among them, is in the issue. |
+| Red | Nothing could be checked (a mistake in `tlsvigil.toml`, for one), a notification was not delivered, or TLSVigil hit a bug; the run's summary says which. |
 
 A certificate about to expire is an issue, not a red run, so a red run always means the check
 itself needs you.

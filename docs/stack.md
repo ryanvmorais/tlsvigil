@@ -9,8 +9,9 @@ project and the reasoning behind each piece. The project is not released yet (`1
 the package is the skeleton, the quality gate, the CI, the certificate check, the domain check,
 the `tlsvigil check` command (the configuration, the text and JSON output, the two languages and the
 exit codes) and its `--notify` (the GitHub issue, Telegram and e-mail, with a state file between
-runs), and the composite Action that runs it in a workflow. The pieces marked **planned** below
-(the PyPI release and the template repository) are not built yet.
+runs), the composite Action that runs it in a workflow, and the files of the template repository
+under `template/`. The pieces marked **planned** below (the PyPI release and the publication of the
+template repository) are not done yet.
 
 The project is one small program with no runtime dependency:
 
@@ -264,12 +265,14 @@ why a subject or body built from certificate or RDAP text is treated as plain da
 
 ### GitHub Actions: schedule and composite Action
 
-**Built (the Action); planned (the template).** The tool runs from a workflow in the user's own
-repository, on a daily `cron` schedule, on the free minutes of a public repository. The composite
-Action in `action.yml` runs the package's source at the commit the workflow pins, with the runner's
-own Python and nothing installed, and keeps the state file between runs in the Actions cache
-(`actions/cache/restore` and `save`, one entry per run, restored by prefix). An example workflow
-will ship in a template repository and in the README.
+**Built (the Action and the template's files); planned (publishing the template repository).** The
+tool runs from a workflow in the user's own repository, on a daily `cron` schedule, on the free
+minutes of a public repository. The composite Action in `action.yml` runs the package's source at
+the commit the workflow pins, with the runner's own Python and nothing installed, and keeps the
+state file between runs in the Actions cache (`actions/cache/restore` and `save`, one entry per
+run, restored by prefix; GitHub removes an entry unused for 7 days). The workflow that uses it
+lives in `template/.github/workflows/tlsvigil.yml`, with a `tlsvigil.toml` and the template's
+READMEs, and both READMEs of this repository show it word for word.
 
 **Why this:** the product is "zero infrastructure": the user needs no server, and the maintainer
 hosts nothing, so a scheduled workflow in the user's repository is the whole runtime. A composite
@@ -409,6 +412,23 @@ lines of the standard library that the suite tests itself.
 **Docs:** [trustme](https://trustme.readthedocs.io/) ·
 [cryptography](https://cryptography.io/)
 
+### PyYAML (dev only)
+
+The reader of the YAML files in the tests. `tests/test_action_files.py` loads `action.yml` and the
+template's workflow with `yaml.safe_load` and checks their structure: the inputs in the order of
+`action.INPUTS`, each `uses:` pinned to a commit SHA, no `${{ }}` in a `run:`, the template's
+triggers, permissions, concurrency and timeout (spec `006`, ADR-6). The version comments and the
+commented channel inputs, which the parser drops, are read as text. `types-pyyaml` gives mypy its
+types. The runtime never reads YAML, so the wheel still declares no dependency.
+
+**Why this:** the standard library has no YAML reader, and a regular expression over the text
+only guesses the structure that "no `${{ }}` in a `run:`" needs; against `ruamel.yaml`, PyYAML is
+the common reader and has typed stubs.
+
+**Learn:** `yaml.safe_load` against `yaml.load`, and why YAML 1.1 reads the key `on:` as `True`.
+
+**Docs:** [PyYAML](https://pyyaml.org/wiki/PyYAMLDocumentation)
+
 ---
 
 ## CI and supply chain
@@ -479,8 +499,8 @@ broken on its first day does not reach the lock.
 - **PyGithub, python-telegram-bot** — API client libraries, each a dependency for the one to four requests of a run.
 - **cryptography, pyOpenSSL at run time** — would parse a certificate in detail; the `ssl` module already returns the date and verifies the chain. `cryptography` is in the dev group only, to make test certificates.
 - **click, typer, rich** — nice command lines, but each is a dependency; `argparse` does the job.
-- **PyYAML, pydantic** — a YAML configuration needs a dependency and a safe loader; TOML with `tomllib` and a hand-written check is enough for a small, fixed shape.
+- **PyYAML, pydantic at run time** — a YAML configuration needs a dependency and a safe loader (PyYAML is in the dev group only, to test the workflow files); TOML with `tomllib` and a hand-written check is enough for a small, fixed shape.
 - **A WHOIS client** — WHOIS has no standard format; RDAP is JSON and standardised.
 - **A hosted service, a database or a dashboard** — the product is zero infrastructure, and a security tool must never be an instance that scans a target the visitor names.
-- **A Docker image, a JavaScript Action** — a composite Action over a pure-Python wheel keeps the release surface to the package.
+- **A Docker image, a JavaScript Action** — a composite Action over the package's pure-Python source keeps the release surface to the package.
 - **Slack, Discord, Teams and other channels** — not built in; the issue, Telegram and e-mail cover the audience, and the `--json` output and the exit code let a later workflow step send the result anywhere else.

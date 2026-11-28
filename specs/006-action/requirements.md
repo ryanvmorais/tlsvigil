@@ -1,6 +1,6 @@
 ---
 feature: The GitHub Action and the template repository — a daily check in the user's own repository, with no server and no secret to start
-status: in progress
+status: done
 date: 2026-11-28
 related:
   - 001-foundation/design.md
