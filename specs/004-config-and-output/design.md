@@ -1,6 +1,6 @@
 ---
 feature: The command — the TOML configuration, the text and JSON output, the language switch and the exit codes
-status: in progress
+status: done
 date: 2026-11-27
 related:
   - 004-config-and-output/requirements.md
@@ -627,3 +627,13 @@ brackets are the only way to give a port to an IPv6 address.
   red), `errors="strict"` on the streams (1 red), the file read before the names (12 red), the
   problems written to the standard output (9 red), the hint for any path (1 red), the place left
   unescaped (1 red), and the `dup2` to `os.devnull` removed (2 red).
+- **Stage 4:** the README's exit codes table lists `3` (ADR-3) beside the three codes RF-10
+  names, since a script that reads the code meets it too. The example of both READMEs is the one
+  of "Interfaces", with `lang` set to each README's language; `test_readme_config.py` compares the
+  hosts, the domains and the timeout of the two, not the language. The parity test of spec `001`
+  gained the row counts of the three new tables (keys, options and exit codes). Seen failing (each
+  change undone): a host removed from the Portuguese example (1 red), `warn_day` in the English
+  example (2 red), and the exit code `3` row removed from the Portuguese README (1 red).
+- **Measurements:** 758 tests pass in about 22 s on Windows (Python 3.15); `src` at 100% of lines
+  and branches (1052 statements, 306 branches). A run of `tlsvigil check --host example.com
+  --domain example.com` against the real services takes about 1 s.

@@ -1,6 +1,6 @@
 ---
 feature: The command — the TOML configuration, the text and JSON output, the language switch and the exit codes
-status: in progress
+status: done
 date: 2026-11-27
 related:
   - 004-config-and-output/requirements.md
@@ -146,18 +146,24 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 4 — Documentation and closing
 
-- [ ] `README.md` and `README.pt-BR.md`: the quick start with `uv run tlsvigil check --host
+- [x] `README.md` and `README.pt-BR.md`: the quick start with `uv run tlsvigil check --host
   example.com`, the example `tlsvigil.toml`, the table of keys with their defaults (with the
   domain written as registered and in its `xn--` form), the flags and the exit codes; "the only
-  command that exists so far" removed. — RF-10
-- [ ] `tests/test_readme_config.py`: the `toml` block of each README loads with `load_config` and
+  command that exists so far" removed. — RF-10. Two new sections in both, "Configuration" and
+  "Command line"; the quick start also checks `--domain example.com` and shows its real output;
+  the exit codes table lists `3` beside the three of RF-09 (ADR-3)
+- [x] `tests/test_readme_config.py`: the `toml` block of each README loads with `load_config` and
   holds the same entries in both; seen failing once with one host removed from one README.
-  — RF-10
-- [ ] `CLAUDE.md`: the command in "Common commands", the four modules in "Architecture", rows in
+  — RF-10. Red: 1 test with the host removed from the Portuguese README, 2 with `warn_days`
+  written `warn_day` in the English one. `tests/test_readme_pt_br.py` also compares the rows of
+  the three new tables (1 red with the exit code `3` row removed from the Portuguese README)
+- [x] `CLAUDE.md`: the command in "Common commands", the four modules in "Architecture", rows in
   "Before you touch", and the project overview no longer saying the CLI answers `--version`
-  only. — RF-10
-- [ ] `docs/stack.md`: `argparse`, `tomllib` and `json` in use; "planned" removed from the
+  only. — RF-10. Also `tests/runs.py` and `tests/reports.py` in "Architecture", and the
+  configuration in "Environment variables"
+- [x] `docs/stack.md`: `argparse`, `tomllib` and `json` in use; "planned" removed from the
   diagram. — RF-10
-- [ ] `specs/README.md`: the `004-config-and-output` row with delivery `v0.4` and status `done`.
-- [ ] `status: done` in the three files; deviations and measurements in the design.
-- [ ] Quality gate. —
+- [x] `specs/README.md`: the `004-config-and-output` row with delivery `v0.4` and status `done`.
+- [x] `status: done` in the three files; deviations and measurements in the design.
+- [x] Quality gate. — 758 passed (6 new: 3 in `test_readme_config.py`, 3 in
+  `test_readme_pt_br.py`); ruff/black/mypy green; `src` at 100% of lines and branches

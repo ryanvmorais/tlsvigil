@@ -6,26 +6,26 @@ and the handful of concepts worth learning first if it is new to you.
 This is not exhaustive: the full version graph is pinned in `uv.lock`, and per-feature decisions
 live in the `### ADR-N` blocks of `specs/*/design.md`. This page is the map: the *shape* of the
 project and the reasoning behind each piece. The project is not released yet (`1.0.0.dev0`): today
-the package is the skeleton, the quality gate, the CI, the certificate check and the domain check
-(library functions that no command calls), and `tlsvigil --version` is the only command that runs.
-The pieces marked **planned** below are specified for the next specs (the configuration and
-output, the notifications and the composite Action) and are not code yet.
+the package is the skeleton, the quality gate, the CI, the certificate check, the domain check and
+the `tlsvigil check` command (the configuration, the text and JSON output, the two languages and the
+exit codes). The pieces marked **planned** below are specified for the next specs (the
+notifications and the composite Action) and are not code yet.
 
 The project is one small program with no runtime dependency:
 
 ```text
-GitHub Actions schedule (cron)  ──►  tlsvigil  (CLI, argparse)            ◄── skeleton built
+GitHub Actions schedule (cron)  ──►  tlsvigil check  (CLI, argparse)      ◄── built
                                         │
         ┌───────────────────────────────┼─────────────────────────────┐
         ▼                               ▼                             ▼
  configuration (TOML)           certificate check              domain check
- tomllib            planned     socket + ssl, verified         IANA bootstrap ──► RDAP server
+ tomllib, validated   built     socket + ssl, verified         IANA bootstrap ──► RDAP server
                                 TLS handshake        built     HTTPS, bounded       built
         │                               │                             │
         └───────────────────────────────┴──────────────┬──────────────┘
                                                        ▼
                        days left per host and per domain ──► text or JSON, --lang en|pt-BR
-                                                       │      + exit code            planned
+                                                       │      + exit code            built
                                                        ▼
             one GitHub issue (REST API, GITHUB_TOKEN)  ·  Telegram  ·  SMTP e-mail   planned
 ```
@@ -162,43 +162,47 @@ both end as "not checked", never as a guess.
 
 ### `argparse`
 
-The command line: `tlsvigil --version` today, and the flags of the later specs (`--json`, `--lang`,
-the configuration path). `main(argv)` takes the argument list and returns the exit code instead of
-calling `sys.exit`, so the tests drive it in-process.
+The command line: `tlsvigil --version` and the `check` sub-command with `--config`, `--host`,
+`--domain`, `--json` and `--lang`. `main(argv)` takes the argument list and returns the exit code
+(`0` to `3`) instead of calling `sys.exit`, so the tests drive it in-process.
 
 **Why this:** against click, typer and rich, each of which is a dependency, `argparse` is enough for
 a handful of flags.
 
-**Learn:** `ArgumentParser`, `add_argument(action="version")`, subparsers, and the pattern of a
-`main(argv) -> int` that tests call directly.
+**Learn:** `ArgumentParser`, `add_argument(action="version")`, `add_subparsers`, a `type=`
+function that raises `ArgumentTypeError`, `parser.error()` (usage and exit `2`), and the pattern of
+a `main(argv) -> int` that tests call directly.
 
 **Docs:** [`argparse`](https://docs.python.org/3.12/library/argparse.html)
 
 ### `tomllib`
 
-**Planned.** Reads the configuration file: the hosts and ports, the domains, the warning threshold
-and the channels. Secrets (a Telegram bot token, an SMTP password) are not in the file: they come
+Reads the configuration file, `tlsvigil.toml`: the language, the timeout, the hosts and ports, the
+domains and the warning thresholds. The whole file is validated by hand before any connection, and
+every problem is reported with its place. Secrets (a Telegram bot token, an SMTP password) are not in the file: they come
 from the CI's secret store.
 
 **Why this:** TOML is what the project's own `pyproject.toml` uses, `tomllib` is in the standard
 library since 3.11 (so under the 3.12 floor), and it only reads, which is all that is needed. YAML
 would need a dependency and has a history of unsafe loaders.
 
-**Learn:** `tomllib.load` (a file opened in binary mode), `TOMLDecodeError`, and validating the
-loaded `dict` by hand with a clear message for an unknown key.
+**Learn:** `tomllib.loads` on text decoded with `utf-8-sig` (the file is read as bytes up to a size
+cap first), `TOMLDecodeError` and its line and column, and validating the loaded `dict` by hand with
+a clear message for an unknown key.
 
 **Docs:** [`tomllib`](https://docs.python.org/3.12/library/tomllib.html)
 
 ### `json` and `datetime`
 
-**Planned.** `json` turns the result into one document for `--json`, which a script can read;
+`json` turns the report into one document for `--json` (schema version `1`), which a script can
+read;
 `datetime` does the arithmetic of "how many days are left" in UTC, so the count does not depend on
 the machine's time zone.
 
 **Why this:** both are in the standard library; a date library such as `arrow` or `pendulum` would
 add a dependency for one subtraction.
 
-**Learn:** `json.dumps(..., ensure_ascii=True, allow_nan=False)`, aware `datetime` objects
+**Learn:** `json.dumps(..., ensure_ascii=True, indent=2)`, aware `datetime` objects
 (`timezone.utc`), and `timedelta.days`.
 
 **Docs:** [`json`](https://docs.python.org/3.12/library/json.html) ·

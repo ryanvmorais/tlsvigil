@@ -122,6 +122,18 @@ def test_both_readmes_have_the_same_comparison_rows() -> None:
     assert _table_rows(_PORTUGUESE, "") == _table_rows(_ENGLISH, "")
 
 
+@pytest.mark.parametrize(
+    ("portuguese", "english"),
+    [("Chave", "Key"), ("Opção", "Option"), ("Código", "Code")],
+    ids=["keys", "options", "exit-codes"],
+)
+@_needs_both
+def test_both_readmes_have_the_same_rows_in_the_command_tables(
+    portuguese: str, english: str
+) -> None:
+    assert _table_rows(_PORTUGUESE, portuguese) == _table_rows(_ENGLISH, english)
+
+
 @_needs_both
 def test_each_readme_links_to_the_other_in_its_first_lines() -> None:
     english = "\n".join(_outside_fences(_ENGLISH)[:4])

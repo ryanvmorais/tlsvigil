@@ -11,10 +11,12 @@ verified TLS handshake; the domain expiry comes from RDAP, through the IANA boot
 channel is one GitHub issue in the user's own repository, opened, updated and closed through the
 workflow's `GITHUB_TOKEN`; Telegram and SMTP are optional.
 
-Not released yet (version `1.0.0.dev0`; the first release will be `1.0.0`, and the `v0.x`
-milestones of the build are in the roadmap of [specs/README.md](specs/README.md)). Today the CLI
-answers `tlsvigil --version` only. Everything is specified in [specs/](specs/) first. The
-repository has been public since day zero; releasing and announcing are the maintainer's acts.
+Not released yet (version `1.0.0.dev0`; the first release will be `1.0.0`, and the `v0.x` milestones
+of the build are in the roadmap of [specs/README.md](specs/README.md)). Today the CLI runs `tlsvigil
+check` (the checks of a `tlsvigil.toml` or of `--host`/`--domain`, printed as text or JSON, with
+exit codes); the issue, the notifications and the Action are not built yet. Everything is specified
+in [specs/](specs/) first. The repository has been public since day zero; releasing and announcing
+are the maintainer's acts.
 
 Everything in the repository is English, except `README.pt-BR.md` (see Conventions).
 
@@ -24,8 +26,10 @@ Everything in the repository is English, except `README.pt-BR.md` (see Conventio
 # Create/update the environment from pyproject.toml + uv.lock (includes the dev group)
 uv sync
 
-# Run the CLI from the source tree
+# Run the CLI from the source tree (exit 0 all fine, 1 needs attention, 2 nothing checked, 3 bug)
 uv run tlsvigil --version
+uv run tlsvigil check --host example.com --domain example.com
+uv run tlsvigil check --config tlsvigil.local.toml --json --lang pt-BR
 
 # Run the tests (one file, then one test)
 uv run pytest
@@ -50,18 +54,24 @@ uv build
 
 ## Environment variables
 
-None yet. Configuration will be a TOML file (spec 004); secrets (a Telegram bot token, an SMTP
-password) come from the CI's secret store, never from a file in the repository. A local
-`tlsvigil.local.toml` and `.env` are ignored.
+None yet. Configuration is a TOML file, `tlsvigil.toml` or `--config PATH` (spec 004); secrets (a
+Telegram bot token, an SMTP password) come from the CI's secret store, never from a file in the
+repository. A local `tlsvigil.local.toml` and `.env` are ignored.
 
 ## Architecture
 
 ```text
-src/tlsvigil/       # the package: cli.py (argparse entry point), __main__.py (python -m tlsvigil),
+src/tlsvigil/       # the package: __main__.py (python -m tlsvigil),
+                    #   cli.py (argparse, the check sub-command, the exit codes 0 to 3)
+                    #   config.py (tlsvigil.toml or the flags → a validated Config, every problem)
+                    #   runner.py (run(): the checks in order, one shared RdapClient → a Report)
+                    #   output.py (render_text(), render_json(), printable() for outside text)
+                    #   i18n.py (the two languages: the catalogue, translate() and plural())
                     #   certificate.py (the verified TLS check, its result type and classify()),
                     #   rdap.py (the domain check: IANA bootstrap, bounded HTTPS, RdapClient)
-                    #   i18n.py (the two languages: the catalogue, translate() and plural())
 tests/              # pytest; the CLI is driven through main(argv), and the docs have tests too
+  runs.py           # the clock, the leaves and the RDAP registry shared by the run tests
+  reports.py        # hand-built reports for the output and CLI tests (no network)
   conftest.py       # installs the network guard (autouse) and the CA and local-server fixtures
   network_guard.py  # resolve and connect on loopback only; anything else fails the test
   tls_server.py     # LocalServer: a TLS, silent or plain-text server on 127.0.0.1 and ::1
@@ -76,10 +86,10 @@ docs/               # stack.md: each technology and why it was chosen
 uv.lock             # never edit by hand (generated; a hook blocks it)
 ```
 
-The certificate check (spec 002) and the domain check over RDAP (spec 003) are library
-functions; no command calls them. The specs to come add, in this order: the configuration, the
-output, `--json`, `--lang` and the exit codes (004), the notifications without duplicates (005),
-and the composite Action in `action.yml` (006).
+`tlsvigil check` (spec 004) loads and validates the whole configuration before any connection,
+runs the certificate checks (spec 002) and then the domain checks over RDAP (spec 003), and
+renders the report. The specs to come add, in this order: the notifications without duplicates
+(005) and the composite Action in `action.yml` (006).
 
 ### Before you touch…
 
@@ -90,7 +100,11 @@ and the composite Action in `action.yml` (006).
 | `src/tlsvigil/rdap.py` | spec `003` (ADR-2 on `http.client`, ADR-3 on the deadline, ADR-4 on the size caps, ADR-5 on redirects) |
 | `tests/conftest.py`, `tests/network_guard.py`, `tests/tls_server.py` | spec `002` (ADR-4, ADR-5 and deviation 7 on `::1`) |
 | `tests/http_server.py`, `tests/data/rdap/` | spec `003` (ADR-7 and deviation 3 on the routes) |
-| `README.md` or `README.pt-BR.md` | the two READMEs rule below and `tests/test_readme_pt_br.py` |
+| `src/tlsvigil/cli.py` (flags, exit codes, streams) | spec `004` (ADR-3 on exit `3`, ADR-7 on the test seams, deviation 5 on `--config` with `--host`) |
+| `src/tlsvigil/config.py` (keys, defaults, places) | spec `004` (ADR-2 on the validators' codes, ADR-6 on the size cap, ADR-8 on host forms); both READMEs show the keys |
+| `src/tlsvigil/output.py`, the JSON shape | spec `004` (ADR-4 on escaping outside text, ADR-5 on the JSON schema version) |
+| `src/tlsvigil/i18n.py` (a sentence or a key) | spec `004` (ADR-1); `tests/test_i18n.py` fails when a language or a key is missing |
+| `README.md` or `README.pt-BR.md` | the two READMEs rule below, `tests/test_readme_pt_br.py` and `tests/test_readme_config.py` |
 | `.github/workflows/` | the comments at the top of each workflow; the ruleset requires the `Quality` checks by name |
 
 ### Do not regress
@@ -117,7 +131,8 @@ and the composite Action in `action.yml` (006).
   CLI text: English (default) and Brazilian Portuguese, chosen by `--lang` (spec 004). The one
   documentation exception is `README.pt-BR.md`, the Portuguese README for the Brazilian audience:
   keep it in step with `README.md` in the same PR; `tests/test_readme_pt_br.py` compares their
-  headings and tables, and `tests/test_readme_links.py` checks that the links of `README.md` still
+  headings and tables, `tests/test_readme_config.py` loads the example `tlsvigil.toml` of both,
+  and `tests/test_readme_links.py` checks that the links of `README.md` still
   resolve after the build rewrites them for PyPI.
 - **Impersonal text:** what is versioned speaks to whoever cloned the repository; the maintainer's
   name appears only in authorship (`tests/test_impersonality.py`).

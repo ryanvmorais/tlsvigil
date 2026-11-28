@@ -22,8 +22,9 @@ precisa de servidor: roda num agendamento diário num repositório seu no GitHub
 gratuitos do GitHub Actions, e abre uma issue lá quando algo pede atenção.
 
 > **Status:** em desenvolvimento, ainda não lançado; o primeiro lançamento será a `1.0.0`. Este
-> README descreve a ferramenta como ela está especificada em [specs/](specs/). Até o primeiro
-> lançamento, só `tlsvigil --version` roda.
+> README descreve a ferramenta como ela está especificada em [specs/](specs/). Hoje o
+> `tlsvigil check` roda a partir de um clone e mostra o resultado; a issue no GitHub, o Telegram,
+> o e-mail e a Action estão especificados, mas ainda não construídos.
 
 ## O que ele verifica
 
@@ -67,9 +68,85 @@ git clone https://github.com/ryanvmorais/tlsvigil.git
 cd tlsvigil
 uv sync
 
-# Confira que o comando roda (o único que existe até agora)
-uv run tlsvigil --version
+# Confira um host e um domínio, sem arquivo de configuração
+uv run tlsvigil check --host example.com --domain example.com --lang pt-BR
 ```
+
+Cada nome ganha uma linha, e a última linha resume a execução:
+
+```text
+OK            example.com:443  certificado vence em 86 dias (2027-02-22)
+OK            example.com      domínio vence em 258 dias (2027-08-13)
+
+2 verificados: 0 precisam de atenção.
+```
+
+Para acompanhar a sua própria lista, escreva-a num arquivo `tlsvigil.toml` (próxima seção) e
+rode `uv run tlsvigil check` na mesma pasta.
+
+## Configuração
+
+O `tlsvigil check` lê o `tlsvigil.toml` da pasta atual, ou o arquivo indicado por
+`--config CAMINHO`. Um exemplo comentado:
+
+```toml
+# Opcional: "en" (padrão) ou "pt-BR".
+lang = "pt-BR"
+# Opcional: segundos para cada conexão TLS e cada consulta RDAP (padrão 10).
+timeout = 10
+
+[certificates]
+# Avisa quando faltarem menos dias do que este (padrão 14).
+warn_days = 14
+hosts = [
+  "example.com",                                  # porta 443
+  "mail.example.com:465",
+  "[2001:db8::1]:8443",
+  { host = "legacy.example.com", warn_days = 30 },
+]
+
+[domains]
+# Avisa quando faltarem menos dias do que este (padrão 30).
+warn_days = 30
+names = ["example.com", "example.com.br"]
+```
+
+| Chave | Padrão | O que guarda |
+|---|---|---|
+| `lang` | `"en"` | O idioma da saída em texto e das mensagens de erro: `"en"` ou `"pt-BR"` |
+| `timeout` | `10` | Os segundos que cada conexão TLS e cada consulta RDAP podem levar, maior que `0` |
+| `certificates.warn_days` | `14` | Avisa quando faltarem menos dias do que este para o certificado vencer (`0` ou mais) |
+| `certificates.hosts` | nenhum | Os hosts a conferir: `"host"` (porta 443), `"host:porta"`, `"[IPv6]:porta"`, ou uma tabela `{ host, port, warn_days }` |
+| `domains.warn_days` | `30` | Avisa quando faltarem menos dias do que este para o registro do domínio vencer (`0` ou mais) |
+| `domains.names` | nenhum | Os domínios a conferir, ou uma tabela `{ name, warn_days }`. Escreva cada domínio como foi registrado (`example.com`, não `www.example.com`), e um nome internacionalizado na forma `xn--` |
+
+O `warn_days` de uma entrada vale mais que o da tabela dela. O arquivo inteiro é conferido antes
+de qualquer conexão: uma chave desconhecida (um erro de digitação como `warn_day`), um valor do
+tipo errado, um host ou um domínio repetido, ou um arquivo sem nada para conferir interrompe a
+execução, e cada problema aparece com o lugar onde está (como `certificates.hosts[2]`).
+
+## Linha de comando
+
+```text
+tlsvigil check [--config CAMINHO | --host HOST[:PORTA]... --domain NOME...] [--json] [--lang en|pt-BR]
+```
+
+| Opção | O que faz |
+|---|---|
+| `--config CAMINHO` | Lê este arquivo em vez do `tlsvigil.toml` |
+| `--host HOST[:PORTA]` | Confere o certificado deste host em vez de ler um arquivo; repita para mais hosts |
+| `--domain NOME` | Confere o registro deste domínio em vez de ler um arquivo; repita para mais domínios |
+| `--json` | Escreve um documento JSON (versão de esquema `1`) com cada resultado e uma contagem por status, com as mesmas chaves e valores em inglês em qualquer idioma |
+| `--lang en\|pt-BR` | O idioma da saída em texto; vale mais que o `lang` do arquivo |
+
+O código de saída diz a um script o que aconteceu:
+
+| Código | Significado |
+|---|---|
+| `0` | Todo resultado é `ok`, ou `unknown` (um domínio sem serviço RDAP ou sem data) |
+| `1` | Pelo menos um resultado pede atenção: `expiring`, `invalid` (um certificado que falha na verificação) ou `error` (a verificação não terminou) |
+| `2` | Nada foi conferido: erro de uso, erro de configuração, ou nada para conferir |
+| `3` | Um erro interno (um bug); o traceback sai na saída de erro |
 
 ## TLSVigil e outras ferramentas
 
