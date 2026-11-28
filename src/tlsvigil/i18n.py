@@ -471,6 +471,158 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
             "separados por vírgulas"
         ),
     },
+    # The notifications (spec 005, RF-11): the title, the issue body and the count. No sentence
+    # holds a Markdown character of its own, so only the names need escaping (ADR-5).
+    "notify.title": {
+        Lang.EN: "TLSVigil: {attention}",
+        Lang.PT_BR: "TLSVigil: {attention}",
+    },
+    "notify.entries.one": {
+        Lang.EN: "{count} entry needs attention",
+        Lang.PT_BR: "{count} entrada precisa de atenção",
+    },
+    "notify.entries.other": {
+        Lang.EN: "{count} entries need attention",
+        Lang.PT_BR: "{count} entradas precisam de atenção",
+    },
+    "notify.nothing": {
+        Lang.EN: "nothing needs attention",
+        Lang.PT_BR: "nada precisa de atenção",
+    },
+    "notify.now": {
+        Lang.EN: "Now {attention}.",
+        Lang.PT_BR: "Agora {attention}.",
+    },
+    "notify.intro": {
+        Lang.EN: "TLSVigil found these entries in need of attention on its last run:",
+        Lang.PT_BR: (
+            "O TLSVigil encontrou estas entradas que precisam de atenção na última execução:"
+        ),
+    },
+    "notify.none": {
+        Lang.EN: "Nothing needs attention.",
+        Lang.PT_BR: "Nada precisa de atenção.",
+    },
+    "notify.footer": {
+        Lang.EN: (
+            "TLSVigil rewrites this issue on every run and closes it when nothing needs "
+            "attention. Closing it by hand stops the updates until something changes."
+        ),
+        Lang.PT_BR: (
+            "O TLSVigil reescreve esta issue a cada execução e a fecha quando nada precisa de "
+            "atenção. Fechá-la à mão interrompe as atualizações até que algo mude."
+        ),
+    },
+    "notify.item": {
+        Lang.EN: "{status} {name}, {detail}",
+        Lang.PT_BR: "{status} {name}, {detail}",
+    },
+    "notify.more.one": {
+        Lang.EN: "... and {count} more",
+        Lang.PT_BR: "... e mais {count}",
+    },
+    "notify.more.other": {
+        Lang.EN: "... and {count} more",
+        Lang.PT_BR: "... e mais {count}",
+    },
+    # The status before a change, in "(was ...)"; with a reason or a kind of error after ": ".
+    "notify.was.expiring": {
+        Lang.EN: "expiring",
+        Lang.PT_BR: "vencendo",
+    },
+    "notify.was.invalid": {
+        Lang.EN: "invalid",
+        Lang.PT_BR: "inválido",
+    },
+    "notify.was.error": {
+        Lang.EN: "not checked",
+        Lang.PT_BR: "não verificado",
+    },
+    # One line per event (RF-05, RF-06); {detail} is the detail of the text output.
+    "event.new": {
+        Lang.EN: "New: {name}, {detail}",
+        Lang.PT_BR: "Novo: {name}, {detail}",
+    },
+    "event.changed": {
+        Lang.EN: "Changed: {name}, {detail} (was {previous})",
+        Lang.PT_BR: "Mudou: {name}, {detail} (antes: {previous})",
+    },
+    "event.reminder": {
+        Lang.EN: "Reminder: {name}, {detail}",
+        Lang.PT_BR: "Lembrete: {name}, {detail}",
+    },
+    "event.resolved": {
+        Lang.EN: "Resolved: {name}",
+        Lang.PT_BR: "Resolvido: {name}",
+    },
+    "event.uncheckable": {
+        Lang.EN: "Ended without being resolved: {name} can no longer be checked",
+        Lang.PT_BR: "Encerrado sem solução: {name} não pode mais ser verificado",
+    },
+    "event.removed": {
+        Lang.EN: "Ended without being resolved: {name} is no longer in the configuration",
+        Lang.PT_BR: "Encerrado sem solução: {name} não está mais na configuração",
+    },
+    # Why a request to a channel got no answer (spec 005; the kinds of https.RequestError).
+    "request.dns": {
+        Lang.EN: "the name of the server does not resolve",
+        Lang.PT_BR: "o nome do servidor não resolve",
+    },
+    "request.refused": {
+        Lang.EN: "the server refused the connection",
+        Lang.PT_BR: "o servidor recusou a conexão",
+    },
+    "request.timeout": {
+        Lang.EN: "the server did not answer within the timeout",
+        Lang.PT_BR: "o servidor não respondeu dentro do timeout",
+    },
+    "request.tls": {
+        Lang.EN: "the TLS connection failed",
+        Lang.PT_BR: "a conexão TLS falhou",
+    },
+    "request.too_large": {
+        Lang.EN: "the answer is too large",
+        Lang.PT_BR: "a resposta é grande demais",
+    },
+    "request.other": {
+        Lang.EN: "an unexpected failure",
+        Lang.PT_BR: "uma falha inesperada",
+    },
+    # Why the GitHub issue could not be written (spec 005, RF-08; the table of "The GitHub issue").
+    "github.unreachable": {
+        Lang.EN: "the GitHub API could not be reached: {kind}",
+        Lang.PT_BR: "não foi possível falar com a API do GitHub: {kind}",
+    },
+    "github.unauthorized": {
+        Lang.EN: "GitHub refused the token",
+        Lang.PT_BR: "o GitHub recusou o token",
+    },
+    "github.permission": {
+        Lang.EN: "the token cannot write issues: the workflow needs permissions: issues: write",
+        Lang.PT_BR: (
+            "o token não pode escrever issues: o workflow precisa de permissions: issues: write"
+        ),
+    },
+    "github.rate_limited": {
+        Lang.EN: "GitHub limits the requests; the next run tries again",
+        Lang.PT_BR: "o GitHub está limitando as requisições; a próxima execução tenta de novo",
+    },
+    "github.not_found": {
+        Lang.EN: "the repository does not exist or the token cannot see it",
+        Lang.PT_BR: "o repositório não existe ou o token não consegue vê-lo",
+    },
+    "github.issues_disabled": {
+        Lang.EN: "issues are turned off in the repository",
+        Lang.PT_BR: "as issues estão desativadas no repositório",
+    },
+    "github.http": {
+        Lang.EN: "GitHub answered HTTP {status}",
+        Lang.PT_BR: "o GitHub respondeu HTTP {status}",
+    },
+    "github.invalid": {
+        Lang.EN: "GitHub sent an answer TLSVigil cannot read",
+        Lang.PT_BR: "o GitHub enviou uma resposta que o TLSVigil não consegue ler",
+    },
     # The state file (spec 005, RF-07; ADR-2): why it was read as empty, so the run counts as
     # the first; and why it could not be written, so the next run repeats a message.
     "state.unreadable": {

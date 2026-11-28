@@ -22,6 +22,7 @@ from tlsvigil.runner import STATUSES, CertificateItem, DomainItem, Report
 __all__ = [
     "NAME_WIDTH_CAP",
     "SCHEMA_VERSION",
+    "days_detail",
     "display_name",
     "printable",
     "render_json",
@@ -127,9 +128,11 @@ def _with_message(detail: str, message: str | None) -> str:
     return detail if not message else f"{detail} ({printable(message)})"
 
 
-def _days_detail(lang: Lang, kind: str, days_left: int, expiry: datetime) -> str:
+def days_detail(lang: Lang, kind: str, days_left: int, expiry: datetime) -> str:
     """
     Write the detail of a dated item: in how many days, or how long ago, and the date.
+
+    The notifications (spec 005, RF-11) write the days left with the same sentences.
 
     Args:
         lang (Lang): The language of the output.
@@ -171,7 +174,7 @@ def _certificate_detail(item: CertificateItem, lang: Lang) -> str:
         return _with_message(translate(lang, "line.certificate.error", kind=kind), result.message)
     # A verified result carries both; classify() already refused one without its days.
     assert result.days_left is not None and result.not_after is not None
-    return _days_detail(lang, "certificate", result.days_left, result.not_after)
+    return days_detail(lang, "certificate", result.days_left, result.not_after)
 
 
 def _domain_detail(item: DomainItem, lang: Lang) -> str:
@@ -194,7 +197,7 @@ def _domain_detail(item: DomainItem, lang: Lang) -> str:
         return _with_message(translate(lang, "line.domain.error", kind=kind), result.message)
     # A dated result carries both; classify() already refused one without its days.
     assert result.days_left is not None and result.expiration is not None
-    return _days_detail(lang, "domain", result.days_left, result.expiration)
+    return days_detail(lang, "domain", result.days_left, result.expiration)
 
 
 def render_text(report: Report, lang: Lang) -> str:

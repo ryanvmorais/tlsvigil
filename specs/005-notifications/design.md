@@ -751,3 +751,27 @@ which is what RF-10 guards.
   instead of through `os.replace` (3 red), the version left to the key check (3 red; the tests
   found it unchecked before the fix), a GitHub part of another repository kept (3 red), and
   the check of an `expiring` result without its date removed (1 red).
+- **Stage 3:** `Delivery` and `DeliveryOutcome` live in `delivery.py`, not in `notify.py`, so
+  the orchestration of stage 5 can import the channels and the channels these types without a
+  cycle. `GitHubChannel(settings, *, timeout, context=None, api_url=API_URL)`; `deliver` gives the
+  `Delivery` and the new `ChannelState`, with one deadline per request. An issue just opened in
+  step 2 gets no `PATCH`: its body is current, so the longest path is the four requests of a kept
+  issue that is gone (`GET`, the list, the comment, the `PATCH`). A kept issue that is open but by
+  another author is forgotten like a closed one, and a pull request is never adopted. A `403` or
+  `429` that is a rate limit is read before the `X-Accepted-GitHub-Permissions` header, which a
+  limited answer may also carry; the `Resource not accessible by integration` message is read
+  first. A request with no answer is `github.unreachable` with the words of `request.<kind>`. The
+  failure sentences are `github.*` in both languages. The event of an entry that became `unknown`
+  says it can no longer be checked, without the reason in parentheses of the design's example: the
+  `Mark` of `alerts.py` carries no reason. A change names what the entry was (`notify.was.*`, with
+  the reason or the kind of error). The comment ends with the count after the run (`notify.now`);
+  the Telegram text starts with the title. A reason the catalogue does not know (a state file
+  holds any string) is shown escaped instead of failing. `output._days_detail` became the public
+  `days_detail`. `FakeGitHub` gives every path of issues 1 to 40 one handler route. Seen failing
+  (each change undone): the fence as long as the longest run of backticks (5 red), the marker
+  check removed from the adoption (1 red), the author check removed from the adoption (2 red) and
+  from the kept issue (1 red; it was green before a test of its own was added), `told` advanced
+  before step 2 (6 red), the close sent whatever the view (1 red), the cut leaving 200 code units
+  unused (1 red; green before the test checked that the room left is under one line), the length
+  counted in characters instead of UTF-16 (1 red), the permission header read before the rate
+  limit (1 red), and a closed issue kept (2 red).
