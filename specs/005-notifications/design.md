@@ -683,3 +683,30 @@ which is what RF-10 guards.
   sabotage is recorded in the implementation notes and the pull request.
 - The network guard of spec `002` stays autouse: `api.github.com` and `api.telegram.org` are never
   resolved in a test.
+
+## Deviations
+
+1. **ADR-1: one test of spec `003` changes its import, not its assertions.**
+   `test_a_deadline_that_passes_before_the_body_is_read_is_a_timeout` freezes the clock of the
+   module that holds the deadline; the deadline moved to `https.py`, so the test patches
+   `https.time` instead of `rdap.time`. The ticks and the assertions are those of spec `003`.
+2. **ADR-1: the body of any status is read, within the cap and the deadline.** The channels need
+   the body of an error answer, so `request()` reads it for every status before the RDAP client
+   maps the status. An RDAP answer outside `2xx` that announces a body over the cap, or never
+   sends its body, is now `too_large` or `timeout` instead of `not_found`, `rate_limited` or
+   `http`; no test of spec `003` covered that case.
+
+## Implementation notes
+
+- **Stage 0:** `deadline_after(timeout)` gives a `Deadline` (the moment and the timeout it was set
+  for, named in the message of a timeout), and one deadline covers the RDAP request and its
+  redirects. `RequestError.kind` is a `Literal` whose values are those of the RDAP `ErrorKind`, so
+  the client maps it with `ErrorKind(kind)`. The caller's headers go first and
+  `Accept-Encoding: identity` and `Connection: close` over them. The test server answers `GET`,
+  `POST` and `PATCH` alike and gained `Route.handled(fn)`, which computes the route from the
+  recorded request. Seen failing (each change undone): `request()` following a redirect (5 red,
+  4 of them RDAP tests), the cap written `>=` in the read loop (1 red) and in the
+  `Content-Length` check (1 red), the deadline not reset before a read (3 red), the `POST` body
+  not sent (2 red), and the caller's `Connection` winning over the fixed one (2 red); in the
+  server, the handler not called (3 red), a handler giving a handler not raising (1 red), and the
+  request body not read (3 red).

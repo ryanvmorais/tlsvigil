@@ -68,14 +68,15 @@ src/tlsvigil/       # the package: __main__.py (python -m tlsvigil),
                     #   output.py (render_text(), render_json(), printable() for outside text)
                     #   i18n.py (the two languages: the catalogue, translate() and plural())
                     #   certificate.py (the verified TLS check, its result type and classify()),
-                    #   rdap.py (the domain check: IANA bootstrap, bounded HTTPS, RdapClient)
+                    #   rdap.py (the domain check: IANA bootstrap, RdapClient, its redirects)
+                    #   https.py (request(): one bounded HTTPS exchange, any status, no redirect)
 tests/              # pytest; the CLI is driven through main(argv), and the docs have tests too
   runs.py           # the clock, the leaves and the RDAP registry shared by the run tests
   reports.py        # hand-built reports for the output and CLI tests (no network)
   conftest.py       # installs the network guard (autouse) and the CA and local-server fixtures
   network_guard.py  # resolve and connect on loopback only; anything else fails the test
   tls_server.py     # LocalServer: a TLS, silent or plain-text server on 127.0.0.1 and ::1
-  http_server.py    # LocalHTTPServer: HTTPS routes (RDAP documents, silent, drip, endless)
+  http_server.py    # LocalHTTPServer: HTTPS routes (fixed, silent, drip, endless, handled)
   data/rdap/        # the hand-written RDAP answers the tests read and serve
   certs.py          # the test certificates trustme does not make (self-signed, no AKI)
 specs/              # spec-driven development: requirements → design → tasks per feature
@@ -98,8 +99,9 @@ renders the report. The specs to come add, in this order: the notifications with
 | `pyproject.toml` (`dependencies`, the README rewrite for PyPI) | spec `001` (ADR-1 and the packaging decisions) |
 | `src/tlsvigil/certificate.py` | spec `002` (ADR-2 on the explicit context, ADR-3 on the reasons) |
 | `src/tlsvigil/rdap.py` | spec `003` (ADR-2 on `http.client`, ADR-3 on the deadline, ADR-4 on the size caps, ADR-5 on redirects) |
+| `src/tlsvigil/https.py` | spec `005` (ADR-1) and spec `003` (ADR-3, ADR-4); the read loop never calls `settimeout` after the body ends |
 | `tests/conftest.py`, `tests/network_guard.py`, `tests/tls_server.py` | spec `002` (ADR-4, ADR-5 and deviation 7 on `::1`) |
-| `tests/http_server.py`, `tests/data/rdap/` | spec `003` (ADR-7 and deviation 3 on the routes) |
+| `tests/http_server.py`, `tests/data/rdap/` | spec `003` (ADR-7 and deviation 3 on the routes); spec `005` (RF-14) for `POST`, `PATCH` and `Route.handled` |
 | `src/tlsvigil/cli.py` (flags, exit codes, streams) | spec `004` (ADR-3 on exit `3`, ADR-7 on the test seams, deviation 5 on `--config` with `--host`) |
 | `src/tlsvigil/config.py` (keys, defaults, places) | spec `004` (ADR-2 on the validators' codes, ADR-6 on the size cap, ADR-8 on host forms); both READMEs show the keys |
 | `src/tlsvigil/output.py`, the JSON shape | spec `004` (ADR-4 on escaping outside text, ADR-5 on the JSON schema version) |

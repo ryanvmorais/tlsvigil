@@ -28,7 +28,7 @@ import trustme
 
 from http_server import LocalHTTPServer, RecordedRequest, Route
 from network_guard import NetworkGuard
-from tlsvigil import __version__, rdap
+from tlsvigil import __version__, https
 from tlsvigil.rdap import (
     MAX_DOMAIN_BYTES,
     MAX_REDIRECTS,
@@ -478,10 +478,10 @@ def test_a_deadline_that_passes_before_the_body_is_read_is_a_timeout(
     registry.routes[DOMAIN_PATH] = rdap_answer("example.com")
     client = make_client()
     client.check_domain("example.org", now=NOW)  # the bootstrap, on the real clock
-    # The clock of the module only: the deadline is set at 0, the connection is opened at 1, the
+    # The clock of the exchange only: the deadline is set at 0, the connection is opened at 1, the
     # status line read at 2, and the first read of the body would start at 6, past 5 seconds.
     ticks = itertools.chain([0.0, 1.0, 2.0], itertools.repeat(6.0))
-    monkeypatch.setattr(rdap, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
+    monkeypatch.setattr(https, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
 
     result = client.check_domain("example.com", now=NOW)
 

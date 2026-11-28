@@ -1,10 +1,12 @@
 """
-A small HTTPS server on the loopback interface for the RDAP tests.
+A small HTTPS server on the loopback interface for the RDAP, exchange and channel tests.
 
 :class:`LocalHTTPServer` listens on a free port of ``127.0.0.1`` and answers each path with the
-:class:`Route` a test gave it: a fixed status, headers and body (a redirect is one of these), or
-one of three misbehaving answers (``silent``, ``drip`` and ``endless``) that a client must bound
-with its timeout and its size cap. A path without a route answers ``404``. Each connection is
+:class:`Route` a test gave it: a fixed status, headers and body (a redirect is one of these), one
+of three misbehaving answers (``silent``, ``drip`` and ``endless``) that a client must bound with
+its timeout and its size cap, or a ``handler`` that computes the answer from the request, as the
+fake APIs of spec 005 do. A path without a route answers ``404``. ``GET``, ``POST`` and ``PATCH``
+are answered alike, and the body of a request is recorded with it. Each connection is
 wrapped in TLS in its own request thread, so a client that rejects the certificate never blocks
 the server, and every thread records its exceptions instead of raising them, as
 :class:`~tls_server.LocalServer` does (spec 003, RF-08 and ADR-7). One request is answered per
@@ -19,7 +21,7 @@ import socketserver
 import ssl
 import sys
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any, Literal, Self, cast
@@ -37,7 +39,7 @@ _ENDLESS_CHUNK = b" " * 65_536
 # The media type of an RDAP answer (RFC 9083), sent by the routes that make up their own headers.
 _RDAP_JSON = "application/rdap+json"
 
-RouteKind = Literal["fixed", "silent", "drip", "endless"]
+RouteKind = Literal["fixed", "silent", "drip", "endless", "handler"]
 
 # ---------------------------------------------------------------------------
 # Routes and recorded requests
@@ -56,8 +58,10 @@ class Route:
         body (bytes): The body of a fixed answer, sent whole.
         headers (Mapping[str, str]): Extra headers of a fixed answer. A ``Content-Length`` given
             here replaces the real one, so a test can announce a body larger than it sends.
-        kind (RouteKind): ``fixed``, or one of the misbehaving answers.
+        kind (RouteKind): ``fixed``, one of the misbehaving answers, or ``handler``.
         interval (float): The seconds between two bytes of the ``drip`` kind.
+        handler (Callable[[RecordedRequest], Route] | None): The function of the ``handler``
+            kind, which gives the route to answer a request with; ``None`` for the other kinds.
     """
 
     status: int = 200
@@ -65,6 +69,7 @@ class Route:
     headers: Mapping[str, str] = field(default_factory=dict)
     kind: RouteKind = "fixed"
     interval: float = 0.0
+    handler: Callable[[RecordedRequest], Route] | None = None
 
     @classmethod
     def redirect(cls, status: int, location: str) -> Route:
@@ -114,21 +119,39 @@ class Route:
         """
         return cls(kind="endless")
 
+    @classmethod
+    def handled(cls, handler: Callable[[RecordedRequest], Route]) -> Route:
+        """
+        Build an answer that a function computes from each request, after it is recorded.
+
+        Args:
+            handler (Callable[[RecordedRequest], Route]): Gives the route to answer with, of any
+                kind but ``handler``; it runs in the request thread, and what it raises is
+                recorded in ``errors``.
+
+        Returns:
+            Route: The computed answer.
+        """
+        return cls(kind="handler", handler=handler)
+
 
 @dataclass(frozen=True)
 class RecordedRequest:
     """
-    One request the server read, kept so a test can count requests and read their headers.
+    One request the server read, kept so a test can count requests and read them.
 
     Attributes:
-        method (str): The method, such as ``GET``.
+        method (str): The method, such as ``GET``, ``POST`` or ``PATCH``.
         path (str): The request target as sent, with its query string.
         headers (tuple[tuple[str, str], ...]): Every header line, in order, repeats included.
+        body (bytes): The body, as many bytes as its ``Content-Length`` announced; empty
+            without one.
     """
 
     method: str
     path: str
     headers: tuple[tuple[str, str], ...]
+    body: bytes = b""
 
     def header(self, name: str) -> str | None:
         """
@@ -316,19 +339,35 @@ class _Server(http.server.ThreadingHTTPServer):
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
-    """Answer one ``GET`` by the route of its path; one request per connection."""
+    """Answer one request by the route of its path; one request per connection."""
 
     protocol_version = "HTTP/1.1"
     timeout = _SOCKET_SECONDS
 
     def do_GET(self) -> None:
-        """Record the request and answer it by its route, or with ``404``."""
+        """Answer a ``GET``."""
+        self._answer()
+
+    def do_POST(self) -> None:
+        """Answer a ``POST``."""
+        self._answer()
+
+    def do_PATCH(self) -> None:
+        """Answer a ``PATCH``."""
+        self._answer()
+
+    def _answer(self) -> None:
+        """Read the body, record the request and answer it by its route, or with ``404``."""
         harness = cast(_Server, self.server).harness
-        harness.record_request(
-            RecordedRequest(self.command, self.path, tuple(self.headers.items()))
-        )
-        route = harness.routes.get(self.path, Route(404))
         self.close_connection = True
+        length = int(self.headers.get("Content-Length") or 0)
+        request = RecordedRequest(
+            self.command, self.path, tuple(self.headers.items()), self.rfile.read(length)
+        )
+        harness.record_request(request)
+        route = harness.routes.get(self.path, Route(404))
+        if route.handler is not None:
+            route = route.handler(request)
         match route.kind:
             case "fixed":
                 self._send_head(route.status, route.headers, len(route.body))
@@ -343,6 +382,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._send_head(200, {"Content-Type": _RDAP_JSON}, None)
                 while not harness.stopped.is_set():
                     self.wfile.write(_ENDLESS_CHUNK)
+            case "handler":
+                raise ValueError("a handler gave another handler route")
 
     def _send_head(self, status: int, headers: Mapping[str, str], length: int | None) -> None:
         """
