@@ -178,26 +178,26 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 5 — `tlsvigil check --notify`
 
-- [ ] `src/tlsvigil/notify.py`: `DeliveryOutcome`, `Delivery`, and `notify(report, config,
+- [x] `src/tlsvigil/notify.py`: `DeliveryOutcome`, `Delivery`, and `notify(report, config,
   settings, state_path, *, lang, context, github_api_url, telegram_api_url)`: the state loaded,
   the answers computed once, each channel in the order of `channels` with its plan, the part
   advanced only on success, the state saved once at the end, and a write failure left on the
   standard error with the exit code unchanged. — RF-01, RF-07, ADR-2
-- [ ] `src/tlsvigil/cli.py`: `--notify` and `--state`, `--state` without `--notify` and `--notify`
+- [x] `src/tlsvigil/cli.py`: `--notify` and `--state`, `--state` without `--notify` and `--notify`
   with `--host` or `--domain` refused, a file with no channel as the problem
   `notifications.channels`, the settings read after the file validates, `EXIT_DELIVERY`, the help
   text with the code `4`, and the seams `environ`, `github_api_url` and `telegram_api_url`. —
   RF-01, RF-03, RF-12, ADR-9
-- [ ] `src/tlsvigil/cli.py`: every write to the standard output and the standard error through the
+- [x] `src/tlsvigil/cli.py`: every write to the standard output and the standard error through the
   Redactor once the settings exist, the traceback of exit `3` formatted with
   `traceback.format_exc()` and redacted. — RNF-03, ADR-7
-- [ ] `src/tlsvigil/output.py` and `src/tlsvigil/i18n.py`: one delivery line per channel after the
+- [x] `src/tlsvigil/output.py` and `src/tlsvigil/i18n.py`: one delivery line per channel after the
   summary, and the `notifications` list in the JSON with its four keys, absent without
   `--notify`; the `delivery.*` sentences in both languages. — RF-12
-- [ ] `tests/test_output.py`: the delivery lines in both languages; the JSON key with every outcome
+- [x] `tests/test_output.py`: the delivery lines in both languages; the JSON key with every outcome
   and its absence without `--notify`; the output without deliveries byte for byte that of spec
   `004`. — RF-12, RF-14
-- [ ] `tests/test_notify.py`: through `main(argv)` with the three fakes and a `tmp_path` state:
+- [x] `tests/test_notify.py`: through `main(argv)` with the three fakes and a `tmp_path` state:
   a check without `--notify` reading and writing no state and sending nothing, with the same run
   under `--notify` as the control; the usage and configuration errors of `--notify` exiting `2`
   with no check run; three runs in a row (a warning told once, reminded, then resolved and
@@ -206,10 +206,10 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
   about; both languages; a secret and an address echoed by each fake and by a crash planted after
   the settings are read, first asserted in the raw exception text, then found in no stream, no
   JSON and no state file. — RF-01, RF-07, RF-12, RNF-03, RF-14
-- [ ] See the new tests fail once: the state written without `--notify`, the part advanced on a
+- [x] See the new tests fail once: the state written without `--notify`, the part advanced on a
   failed delivery, the exit code `4` given only when the checks found something, the Redactor left
   off the traceback; each goes red, then the change is undone. — RF-01, RF-07, RF-12, RNF-03
-- [ ] Quality gate. —
+- [x] Quality gate. — ruff, black, mypy and pytest green (1411 tests, 99% coverage)
 
 ## Stage 6 — Documentation and the close of the spec
 

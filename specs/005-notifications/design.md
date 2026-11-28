@@ -700,6 +700,12 @@ which is what RF-10 guards.
    "anywhere in the table", so every key of that table is `config.secret_key` in both places
    (`notifications.password`, `notifications.smtp.token`). `github` and `telegram` stay secret only
    as tables; written as anything else they are `config.unknown_key`.
+4. **ADR-7: `notify()` takes a `warn` callable and writes nothing itself.** The design's signature
+   has no way to hand the lines about the state file to the command, and they must pass through
+   the Redactor like every other text. `notify()` gains the keyword `warn`, which takes each
+   translated line (the state read as empty, the state that cannot be written); the command's
+   `warn` redacts it and writes it to the standard error. A return value would lose the line of a
+   failed write when a channel's bug ends the run, since the state is saved in a `finally`.
 
 ## Implementation notes
 
@@ -804,3 +810,28 @@ which is what RF-10 guards.
   instead of before each line (1 red), the refused recipient named (1 red), a partial refusal
   giving the old part (1 red), `local_hostname` left out (12 red, through the network guard),
   and the guard without the older lookups (5 red).
+- **Stage 5:** `notify()` keeps the parts of the channels in a `dict` and saves them in a
+  `finally`, so a bug inside a channel ends at the exit `3` with the parts of the channels already
+  delivered on disk; the part of the channel that raised stays as it was. With `--notify`, a file
+  without `[notifications]` or with an empty `channels` is the problem `config.no_channel` at
+  `notifications.channels`, raised after the file validates, so a file with other problems lists
+  those instead. The problems of the variables have their own heading, `cli.environment_heading`,
+  since the file itself is fine. `--notify` with `--host` or `--domain` and `--state` without
+  `--notify` are `check.error` (exit `2`), worded like argparse's own. The Redactor starts as the
+  identity and becomes the settings' `Redactor` once they are read; it cleans the report, the
+  state lines and the traceback, now written with `traceback.format_exc()`. A delivery line names
+  the issue after `sent` and `nothing new` (`github: nothing new (issue #1)`, an issue brought up
+  to date), never after `failed`; the reason of a failure goes through `printable`. In the JSON,
+  `message` is in the language of the run, the one sentence of the document: it is the text the
+  channel wrote, and `outcome` is the identifier a program reads. `test_notify.py` replaces the
+  checks with reports built by hand and serves both fake APIs on one `LocalHTTPServer`. Seen
+  failing (each change undone): the state written without `--notify` (2 red), the part advanced
+  on a failed delivery (2 red), the exit code `4` given only when the checks found something
+  (1 red), the Redactor left off the traceback (1 red) and off the report (2 red), the state saved
+  only when no channel crashed (1 red), the reason of a failure not escaped (1 red), the
+  `notifications` key written without `--notify` (3 red), the outcome not translated (11 red),
+  the issue named on a failure (4 red), the deliveries dropped from a report without items
+  (1 red), the issue always `null` in the JSON (2 red), `--notify` with names accepted (2 red),
+  `--state` without `--notify` accepted (1 red), an empty `channels` accepted (1 red), the
+  environment heading not used (1 red), `--state` ignored (2 red), the language of the run not
+  passed to the channels (1 red), and the failed write of the state not caught (1 red).

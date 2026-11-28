@@ -78,6 +78,7 @@ src/tlsvigil/       # the package: __main__.py (python -m tlsvigil),
                     #   telegram.py (TelegramChannel: one plain-text sendMessage)
                     #   mail.py (MailChannel: smtplib bounded by one deadline and a line cap)
                     #   delivery.py (Delivery, DeliveryOutcome: what a channel did)
+                    #   notify.py (notify(): state in, one plan per channel, state out)
 tests/              # pytest; the CLI is driven through main(argv), and the docs have tests too
   runs.py           # the clock, the leaves and the RDAP registry shared by the run tests
   reports.py        # hand-built reports for the output and CLI tests (no network)
