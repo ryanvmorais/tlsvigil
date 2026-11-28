@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Final
 
-__all__ = ["MESSAGES", "Lang", "plural", "translate"]
+__all__ = ["MESSAGES", "Lang", "parse_lang", "plural", "translate"]
 
 
 # ---------------------------------------------------------------------------
@@ -793,12 +793,38 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
         Lang.EN: "tlsvigil: internal error; this is a bug, please report it with the text below.",
         Lang.PT_BR: "tlsvigil: erro interno; isto é um defeito, informe-o com o texto abaixo.",
     },
+    # The GitHub Action (spec 006, RF-02): an input outside its form, named, never quoted.
+    "action.input_boolean": {
+        Lang.EN: "the input {name} must be true or false",
+        Lang.PT_BR: "a entrada {name} deve ser true ou false",
+    },
+    "action.input_lang": {
+        Lang.EN: "the input lang must be en or pt-BR, or be left empty",
+        Lang.PT_BR: "a entrada lang deve ser en ou pt-BR, ou ficar vazia",
+    },
 }
 
 
 # ---------------------------------------------------------------------------
 # Lookup
 # ---------------------------------------------------------------------------
+
+
+# The spellings a language is given in, in any case (RF-08): `--lang`, and the Action's input.
+_SPELLINGS: Final = {lang.lower(): lang for lang in Lang}
+
+
+def parse_lang(text: str) -> Lang | None:
+    """
+    Read a language as ``--lang`` and the Action's ``lang`` input give it, without regard to case.
+
+    Args:
+        text (str): The value given, such as ``pt-BR`` or ``PT-br``.
+
+    Returns:
+        Lang | None: The language, or ``None`` for any other value.
+    """
+    return _SPELLINGS.get(text.lower())
 
 
 def translate(lang: Lang, key: str, **params: str | int) -> str:
