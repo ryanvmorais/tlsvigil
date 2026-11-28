@@ -49,31 +49,35 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 1 — The configuration
 
-- [ ] `src/tlsvigil/config.py`: the constants, `HostEntry`, `DomainEntry`, `Config`, `Problem`
+- [x] `src/tlsvigil/config.py`: the constants, `HostEntry`, `DomainEntry`, `Config`, `Problem`
   and `ConfigError`, as in the design's data model. — RF-04, RF-05
-- [ ] `src/tlsvigil/config.py`: `load_config(path)`: the binary read up to `MAX_CONFIG_BYTES + 1`,
+- [x] `src/tlsvigil/config.py`: `load_config(path)`: the binary read up to `MAX_CONFIG_BYTES + 1`,
   the missing file, the directory and the permission error, the `utf-8-sig` decoding, and
   `tomllib.loads` with the line and column of a `TOMLDecodeError` (`lineno`/`colno` when present,
-  the message suffix otherwise, the 3.14 branch marked for coverage). — RF-02, RNF-04, ADR-6
-- [ ] `src/tlsvigil/config.py`: `validate(document)`: the allowed keys of each table, the types
+  the message suffix otherwise, the 3.14 branch marked for coverage). — RF-02, RNF-04, ADR-6. The position is read by the
+  public `toml_position()`, with no branch to mark (deviation 2)
+- [x] `src/tlsvigil/config.py`: `validate(document)`: the allowed keys of each table, the types
   and bounds (`inf` and `nan` refused), `lang` without regard to case, the string and table forms
   of an entry with the host syntax of ADR-8, `validate_host` and `normalize_domain` mapped by
   code, the duplicates naming the first place, nothing to check, every problem collected in
   order. — RF-04, RF-05, ADR-2, ADR-8
-- [ ] `src/tlsvigil/config.py`: `config_from_names(hosts, domains)` with the defaults and the same
+- [x] `src/tlsvigil/config.py`: `config_from_names(hosts, domains)` with the defaults and the same
   entry validation, places `--host[N]` and `--domain[N]`. — RF-03, RF-05
-- [ ] `src/tlsvigil/i18n.py`: the sentences of every configuration problem, in both languages.
+- [x] `src/tlsvigil/i18n.py`: the sentences of every configuration problem, in both languages.
   — RF-08
-- [ ] `tests/test_config.py`: the example of the design's "Interfaces" loads to the expected
+- [x] `tests/test_config.py`: the example of the design's "Interfaces" loads to the expected
   `Config`; each default; both entry forms; the per-entry threshold; the IPv6 forms; a normalized
   domain; a byte order mark; the parametrized bad files of the design's test strategy, each with
   its place and message key; exactly the cap as the control of the cap plus one; five problems in
   one file reported in order; `config_from_names` with good and bad names. — RF-02 to RF-05, RF-11
-- [ ] See the new tests fail once: the unknown-key check removed, the problem list stopping at the
+- [x] See the new tests fail once: the unknown-key check removed, the problem list stopping at the
   first, the duplicate check removed, the per-entry threshold ignored, `utf-8-sig` turned into
   `utf-8`, the cap check off by one, the `isfinite` check removed, the bracket rule of ADR-8
-  dropped; each goes red, then the change is undone. — RF-04, RF-05
-- [ ] Quality gate. —
+  dropped; each goes red, then the change is undone. — RF-04, RF-05. Red: 7, 5, 7, 2, 1, 1,
+  2 and 12 tests, in that order
+- [x] Quality gate. — 548 passed (167 new: 123 in `test_config.py`, 44 for the new keys in
+  `test_i18n.py`); ruff/black/mypy green; `src` at 100% of lines and branches; `test_config.py`
+  and `test_i18n.py` also pass on Python 3.12
 
 ## Stage 2 — The run and the output
 
