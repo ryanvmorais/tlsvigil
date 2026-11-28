@@ -81,33 +81,38 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 2 — The run and the output
 
-- [ ] `src/tlsvigil/runner.py`: `CertificateItem`, `DomainItem`, `Report` with `counts()` and
+- [x] `src/tlsvigil/runner.py`: `CertificateItem`, `DomainItem`, `Report` with `counts()` and
   `needs_attention()`, `ATTENTION`, and `run(config, *, context, bootstrap_url, now)` with the
-  `RdapClient` created only when there is a domain. — RF-01, RF-09
-- [ ] `src/tlsvigil/output.py`: `printable(text)` over the categories `Cc`, `Cf`, `Cs`, `Co`,
-  `Cn`, `Zl` and `Zp`. — RNF-02, ADR-4
-- [ ] `src/tlsvigil/output.py`: `render_text(report, lang)`: the status and name columns, the
+  `RdapClient` created only when there is a domain. — RF-01, RF-09. `STATUSES` holds the five
+  status values in the order of the counts
+- [x] `src/tlsvigil/output.py`: `printable(text)` over the categories `Cc`, `Cf`, `Cs`, `Co`,
+  `Cn`, `Zl` and `Zp`. — RNF-02, ADR-4. Each one becomes its `unicode_escape` form
+- [x] `src/tlsvigil/output.py`: `render_text(report, lang)`: the status and name columns, the
   detail of each status, the days (singular, plural, zero, negative) and the UTC date, the reason
   and the error kind in words, the message through `printable()`, the summary line. — RF-06,
-  RF-08
-- [ ] `src/tlsvigil/output.py`: `render_json(report, exit_code)` with the shape of the design's
+  RF-08. A report without items gives the summary alone, with no blank line before it
+- [x] `src/tlsvigil/output.py`: `render_json(report, exit_code)` with the shape of the design's
   "Interfaces", `ensure_ascii=True`, `indent=2` and a final newline. — RF-07, RNF-03, RNF-05,
   ADR-5
-- [ ] `src/tlsvigil/i18n.py`: the status labels, the details, the summary, and the words of every
-  reason and error kind of specs `002` and `003`, in both languages. — RF-06, RF-08
-- [ ] `tests/test_i18n.py`: every member of the reason and error-kind enums of specs `002` and
-  `003` has a key. — RF-08
-- [ ] `tests/test_runner.py`: against the local servers, the order of the items, the per-entry
+- [x] `src/tlsvigil/i18n.py`: the status labels, the details, the summary, and the words of every
+  reason and error kind of specs `002` and `003`, in both languages. — RF-06, RF-08. 43 keys
+- [x] `tests/test_i18n.py`: every member of the reason and error-kind enums of specs `002` and
+  `003` has a key. — RF-08. Also: every status has a label, and no two labels of a language match
+- [x] `tests/test_runner.py`: against the local servers, the order of the items, the per-entry
   threshold applied, `counts()` and `needs_attention()` for each status; a run without domains
-  sends no bootstrap request, with one domain sending exactly one as the control. — RF-01, RF-09
-- [ ] `tests/test_output.py`: the text and JSON cases of the design's test strategy, on reports
-  built by hand. — RF-06, RF-07, RNF-02, RNF-03, RNF-05, RF-11
-- [ ] See the new tests fail once: `error` removed from `ATTENTION`, the client created even
+  sends no bootstrap request, with one domain sending exactly one as the control. — RF-01, RF-09.
+  The counts per status run on reports built by hand
+- [x] `tests/test_output.py`: the text and JSON cases of the design's test strategy, on reports
+  built by hand. — RF-06, RF-07, RNF-02, RNF-03, RNF-05, RF-11. The reports come from the new
+  `tests/reports.py`
+- [x] See the new tests fail once: `error` removed from `ATTENTION`, the client created even
   without domains, `Cf` removed from the categories of `printable()`, `ensure_ascii` set to
   `False`, a key left out of an `error` item, the singular key used for every count, the name
   column cut at 40 characters; each goes red, then the change is undone. — RF-01, RF-06, RF-07,
-  RF-09, RNF-02
-- [ ] Quality gate. —
+  RF-09, RNF-02. Red: 6, 4, 5, 1, 1, 10 and 1 tests, in that order
+- [x] Quality gate. — 710 passed (162 new: 16 in `test_runner.py`, 54 in `test_output.py`, 92
+  in `test_i18n.py`); ruff/black/mypy green; `src` at 100% of lines and branches; the three files
+  also pass on Python 3.12
 
 ## Stage 3 — The command
 
