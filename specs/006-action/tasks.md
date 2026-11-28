@@ -105,7 +105,7 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
   RF-07, RF-12, RNF-04, RNF-05
 - [x] `specs/001-foundation/design.md`: ADR-6 gains `**Superseded by** 006-action, ADR-1.` below its
   title. — ADR-1
-- [ ] See the new tests fail once: a tag in place of a SHA, `${{ inputs.config }}` in the `run:`,
+- [x] See the new tests fail once: a tag in place of a SHA, `${{ inputs.config }}` in the `run:`,
   an input missing from `action.yml`, the save without `always()`, `-I` removed from the bootstrap;
   each goes red, then the change is undone. On the pull request, the "Action" job is seen red once
   with an expected outcome changed, then green. — RF-12, ADR-2

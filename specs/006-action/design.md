@@ -505,4 +505,6 @@ without `-I` runs the planted file. `action.yml` joins the authorship files of
 `tests/test_impersonality.py`, because its `author:` names the package's author. Each guard was
 seen failing once, then restored: a tag in place of the SHA (1 test red), `${{ inputs.config }}` in
 the `run:` (1), the input `smtp-to` removed (3), the save without `always()` (1), `-I` removed
-from the bootstrap (1). Gate: 1518 tests, 99% coverage.
+from the bootstrap (1). Gate: 1518 tests, 99% coverage. On the pull request, the "Action" job
+went red on the three runners with one expected exit code changed, only that run differing, and
+the cache restore of the fifth run missed; then green with the right value.
