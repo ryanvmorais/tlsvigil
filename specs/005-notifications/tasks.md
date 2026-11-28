@@ -110,43 +110,43 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
   first `error` removed, `REMOVED` events placed in configuration order, the cap compared with
   `>=`, the write done in place instead of through `os.replace`; each goes red, then the change is
   undone. — RF-04, RF-06, RF-07
-- [x] Quality gate. —
+- [x] Quality gate. — ruff, black, mypy and pytest green (1293 tests, 99% coverage)
 
 ## Stage 3 — Messages and the GitHub issue
 
-- [ ] `src/tlsvigil/messages.py`: the title, the issue body with the marker, the events, the
+- [x] `src/tlsvigil/messages.py`: the title, the issue body with the marker, the events, the
   Telegram text, and the e-mail subject and body, in both languages, the details from the
   sentences of spec `004`; the code span with a fence longer than any run of backticks inside,
   for GitHub only; the caps at a whole line measured in UTF-16 code units, with `... and N more`.
   — RF-08, RF-11, RNF-04, ADR-5
-- [ ] `src/tlsvigil/i18n.py`: the `notify.*` and `event.*` sentences in both languages, with no
+- [x] `src/tlsvigil/i18n.py`: the `notify.*` and `event.*` sentences in both languages, with no
   Markdown character of their own. — RF-11
-- [ ] `src/tlsvigil/github.py`: `GitHubChannel.deliver(plan, part, now, lang)` in the three steps
+- [x] `src/tlsvigil/github.py`: `GitHubChannel.deliver(plan, part, now, lang)` in the three steps
   of the design (find, tell, bring up to date), at most four requests, the headers, the 1 MiB cap,
   `told` advanced once step 2 succeeds, the number forgotten on a close, and the failure messages
   of the design's table with GitHub's `message` escaped and cut. — RF-08, RNF-02, RNF-05, RNF-06,
   ADR-3, ADR-4
-- [ ] `tests/fake_apis.py`: `FakeGitHub`, a set of `Route.handler` routes that keep issues and
+- [x] `tests/fake_apis.py`: `FakeGitHub`, a set of `Route.handler` routes that keep issues and
   comments in memory, check the headers and the token, and can be told to answer `401`, the `403`
   of a missing permission, a rate limit, `404`, `410` or `301`, or to fail one step. — RF-14
-- [ ] `tests/test_messages.py`: each event in both languages; the body with the view and the days
+- [x] `tests/test_messages.py`: each event in both languages; the body with the view and the days
   left from `started_at`; outside text with Markdown, HTML, `@user`, `#1`, `https://` and
   `www.` URLs, backticks, control characters and a line break, inside a code span for GitHub and
   as plain text for the others; every catalogue sentence of the notifications free of Markdown
   characters; the caps with one entry more than fits; the subject with no outside text. — RF-11,
   RNF-04, RF-14
-- [ ] `tests/test_github.py`: a new warning opening one issue; a later change commenting and
+- [x] `tests/test_github.py`: a new warning opening one issue; a later change commenting and
   rewriting; a run with no event rewriting with no comment; the last warning resolved commenting
   and closing; an issue closed by a person left closed and a new one opened at the next change;
   a deleted, a transferred and a missing issue forgotten; adoption of TLSVigil's issue, with an
   issue by another author and one without the marker left untouched beside it; each failure of the
   table with its message; step 3 failing, `told` advanced, and the next run closing the issue; at
   most four requests on every path. — RF-08, RF-14
-- [ ] See the new tests fail once: the fence as long as the longest run of backticks, the marker
+- [x] See the new tests fail once: the fence as long as the longest run of backticks, the marker
   check removed from the adoption, the author check removed, `told` advanced before step 2, the
   close sent without the empty view; each goes red, then the change is undone. — RF-08, RNF-04,
   ADR-3, ADR-5
-- [ ] Quality gate. —
+- [x] Quality gate. —
 
 ## Stage 4 — Telegram and e-mail
 
