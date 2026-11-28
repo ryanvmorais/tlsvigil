@@ -125,6 +125,96 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
         Lang.EN: "the domain must not end in a numeric label (an IP address is not a domain)",
         Lang.PT_BR: "o domínio não pode terminar num rótulo numérico (endereço IP não é domínio)",
     },
+    # The configuration file itself (RF-02; the place of these problems is empty).
+    "config.missing": {
+        Lang.EN: "the file {path} does not exist",
+        Lang.PT_BR: "o arquivo {path} não existe",
+    },
+    "config.directory": {
+        Lang.EN: "{path} is a directory, not a file",
+        Lang.PT_BR: "{path} é uma pasta, não um arquivo",
+    },
+    "config.permission": {
+        Lang.EN: "no permission to read {path}",
+        Lang.PT_BR: "sem permissão para ler {path}",
+    },
+    "config.unreadable": {
+        Lang.EN: "could not read {path}: {detail}",
+        Lang.PT_BR: "não foi possível ler {path}: {detail}",
+    },
+    "config.too_large": {
+        Lang.EN: "{path} is larger than {limit} KiB, too large for a configuration file",
+        Lang.PT_BR: "{path} passa de {limit} KiB, grande demais para um arquivo de configuração",
+    },
+    "config.not_utf8": {
+        Lang.EN: "{path} is not UTF-8 text",
+        Lang.PT_BR: "{path} não é texto em UTF-8",
+    },
+    "config.toml_syntax": {
+        Lang.EN: "invalid TOML at line {line}, column {column}: {detail}",
+        Lang.PT_BR: "TOML inválido na linha {line}, coluna {column}: {detail}",
+    },
+    # The shape of the configuration (RF-04, RF-05; the place names the key or the entry).
+    "config.unknown_key": {
+        Lang.EN: "unknown key; check its spelling",
+        Lang.PT_BR: "chave desconhecida; confira a grafia",
+    },
+    "config.not_a_table": {
+        Lang.EN: "must be a table",
+        Lang.PT_BR: "deve ser uma tabela",
+    },
+    "config.not_a_list": {
+        Lang.EN: "must be a list",
+        Lang.PT_BR: "deve ser uma lista",
+    },
+    "config.not_a_string": {
+        Lang.EN: "must be a string",
+        Lang.PT_BR: "deve ser um texto entre aspas",
+    },
+    "config.missing_key": {
+        Lang.EN: "the entry needs the key {key}",
+        Lang.PT_BR: "a entrada precisa da chave {key}",
+    },
+    "config.bad_host_entry": {
+        Lang.EN: 'must be a string such as "example.com:443" or an inline table with host',
+        Lang.PT_BR: 'deve ser um texto como "example.com:443" ou uma tabela em linha com host',
+    },
+    "config.bad_domain_entry": {
+        Lang.EN: 'must be a string such as "example.com" or an inline table with name',
+        Lang.PT_BR: 'deve ser um texto como "example.com" ou uma tabela em linha com name',
+    },
+    "config.lang": {
+        Lang.EN: 'the language must be "en" or "pt-BR"',
+        Lang.PT_BR: 'o idioma deve ser "en" ou "pt-BR"',
+    },
+    "config.timeout": {
+        Lang.EN: "the timeout must be a number of seconds greater than 0",
+        Lang.PT_BR: "o timeout deve ser um número de segundos maior que 0",
+    },
+    "config.warn_days": {
+        Lang.EN: "warn_days must be a whole number, 0 or more",
+        Lang.PT_BR: "warn_days deve ser um número inteiro, 0 ou mais",
+    },
+    "config.host_syntax": {
+        Lang.EN: "write the host as host, host:port or [IPv6]:port",
+        Lang.PT_BR: "escreva o host como host, host:porta ou [IPv6]:porta",
+    },
+    "config.brackets": {
+        Lang.EN: "only an IPv6 address goes in brackets",
+        Lang.PT_BR: "só um endereço IPv6 vai entre colchetes",
+    },
+    "config.duplicate_host": {
+        Lang.EN: "this host and port are already listed at {first}",
+        Lang.PT_BR: "este host e esta porta já estão listados em {first}",
+    },
+    "config.duplicate_domain": {
+        Lang.EN: "this domain is already listed at {first}",
+        Lang.PT_BR: "este domínio já está listado em {first}",
+    },
+    "config.nothing_to_check": {
+        Lang.EN: "nothing to check: no host and no domain is listed",
+        Lang.PT_BR: "nada a verificar: nenhum host e nenhum domínio listado",
+    },
 }
 
 

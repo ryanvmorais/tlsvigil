@@ -557,6 +557,17 @@ brackets are the only way to give a port to an IPv6 address.
    **params)` sits beside `translate` in `i18n.py`: it picks `<key>.one` for a count of `1` and
    `<key>.other` for any other, and fills `count`. A count of days already passed is given as a
    positive number, so the caller writes "expired 3 days ago" from `3`.
+2. **RF-02, ADR-6: the position of a TOML error comes from a pure function.**
+   `toml_position(message, text, lineno, colno)` takes the attributes of the error as arguments
+   (`None` before Python 3.14) instead of a branch on the version marked for coverage, so the
+   tests run both paths on every Python. The detail is the message without its position suffix,
+   the same text on every version (RNF-06).
+3. **RF-05, ADR-8: a URL with one `:` is reported as a URL.** When a host string has one `:` and
+   no valid port after it (`https://example.com`), the rules of the whole text run first, so the
+   problem is `host.url_or_path` (or the whitespace or the empty host) and not a bad port.
+4. **RF-04: a table or a list of the wrong type counts as written.** `certificates = 1` or
+   `hosts = "example.com"` gives its own problem without "nothing to check" beside it; that
+   problem stays for a file with no table, or with empty lists only.
 
 ## Implementation notes
 
@@ -570,3 +581,15 @@ brackets are the only way to give a port to an IPv6 address.
   (1 red), the Portuguese `host.empty` removed (2 red), `{count}` renamed `{total}` in Portuguese
   (2 red), the result formatted a second time (4 red), `domain.too_long` renamed (1 red), and `0`
   made singular (1 red); each change was undone.
+- **Stage 1:** the places count entries from 1 (`certificates.hosts[1]`, `--host[1]`), as a person
+  counts the lines of a list; a key with a wrong value has the key's path as its place, and a rule
+  of a table entry points at its field (`certificates.hosts[2].port`, `domains.names[1].name`).
+  An entry with another problem is still remembered for the duplicate check, so a later copy of
+  it is reported too. Windows opens a directory with a `PermissionError`, so that error is
+  reported as a directory when the path is one. The catalogue gained 22 `config.*` sentences; a
+  test reads every `config.*` key written in `config.py` and fails when the catalogue lacks one.
+  Seen failing (each change undone): the unknown-key check removed (7 red), the collector
+  raising at the first problem (5 red), the duplicate check removed (7 red), the per-entry
+  threshold replaced by the table's (2 red), `utf-8-sig` turned into `utf-8` (1 red), the cap
+  check written `>=` (1 red), `isfinite` removed (2 red), and the bracket rule of ADR-8 dropped
+  (12 red).
