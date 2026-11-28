@@ -1,0 +1,8 @@
+# The configuration of the "Action" CI job for an invalid channel setting (spec 006, RF-12): the
+# only channel is Telegram and the job passes none of its inputs, so the command stops before any
+# check with exit code 2; the host is the same closed port as refused.toml, never reached.
+[certificates]
+hosts = ["127.0.0.1:1"]
+
+[notifications]
+channels = ["telegram"]

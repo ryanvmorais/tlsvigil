@@ -497,3 +497,14 @@ without the file (1), the `--config` value as a separate argument (3), the copy 
 whole line (3), the cap counted in characters (1), a split character decoded strictly (1), a
 secret masked whole (1), an empty line masked (1), no state directory made (4), `fileno` of
 another stream (1). Gate: 1502 tests, 99% coverage, `action.py` 100%.
+
+**Stage 2.** `action.yml` with the script of "Interfaces" unchanged and `actions/cache` `v6.1.0`
+pinned by SHA; 15 tests in `tests/test_action_files.py`, among them the bootstrap run in a
+subprocess from a directory with a planted `json.py`, and its positive control: the same line
+without `-I` runs the planted file. `action.yml` joins the authorship files of
+`tests/test_impersonality.py`, because its `author:` names the package's author. Each guard was
+seen failing once, then restored: a tag in place of the SHA (1 test red), `${{ inputs.config }}` in
+the `run:` (1), the input `smtp-to` removed (3), the save without `always()` (1), `-I` removed
+from the bootstrap (1). Gate: 1518 tests, 99% coverage. On the pull request, the "Action" job
+went red on the three runners with one expected exit code changed, only that run differing, and
+the cache restore of the fifth run missed; then green with the right value.

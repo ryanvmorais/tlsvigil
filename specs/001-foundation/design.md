@@ -217,6 +217,8 @@ so they cannot slip in. Reviewed when 3.12 reaches end of life (2028-10-31).
 
 ### ADR-6 — A composite Action that installs the code at its own commit
 
+**Superseded by** 006-action, ADR-1.
+
 **Decision.** `action.yml` at the repository root describes a composite Action that installs the
 package from `${{ github.action_path }}`, so the commit SHA in the user's `uses:` line pins the
 code that runs. The final shape is decided in spec `006`.

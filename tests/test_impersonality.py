@@ -30,8 +30,11 @@ _ROOT = Path(__file__).resolve().parents[1]
 # word, so it does not match.
 _NAME = re.compile(r"\bRyan\b")
 
-# Authorship and this file, which has to spell the name to look for it.
-_NAME_ALLOWED = frozenset({"LICENSE", "pyproject.toml", "tests/test_impersonality.py"})
+# Authorship (the license, the package's and the Action's metadata) and this file, which has to
+# spell the name to look for it.
+_NAME_ALLOWED = frozenset(
+    {"LICENSE", "action.yml", "pyproject.toml", "tests/test_impersonality.py"}
+)
 
 # Commands of personal skills, and the personal configuration folder. A slash command is a name
 # after a slash that no word, dot or slash precedes, so ``docs/stack.md`` is not one. The

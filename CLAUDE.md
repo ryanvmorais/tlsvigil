@@ -15,7 +15,8 @@ Not released yet (version `1.0.0.dev0`; the first release will be `1.0.0`, and t
 of the build are in the roadmap of [specs/README.md](specs/README.md)). Today the CLI runs `tlsvigil
 check` (the checks of a `tlsvigil.toml` or of `--host`/`--domain`, printed as text or JSON, with
 exit codes) and, with `--notify`, delivers the result to the GitHub issue, Telegram and e-mail; the
-Action is not built yet. Everything is specified in [specs/](specs/) first. The repository has been public since day zero; releasing and announcing
+composite Action in `action.yml` runs that command in a workflow, and the template repository is not
+built yet. Everything is specified in [specs/](specs/) first. The repository has been public since day zero; releasing and announcing
 are the maintainer's acts.
 
 Everything in the repository is English, except `README.pt-BR.md` (see Conventions).
@@ -96,6 +97,7 @@ src/tlsvigil/       # the package: __main__.py (python -m tlsvigil),
                     #   mail.py (MailChannel: smtplib bounded by one deadline and a line cap)
                     #   delivery.py (Delivery, DeliveryOutcome: what a channel did)
                     #   notify.py (notify(): state in, one plan per channel, state out)
+                    #   action.py (the Action's Check step: inputs, the fenced log, summary, outputs)
 tests/              # pytest; the CLI is driven through main(argv), and the docs have tests too
   runs.py           # the clock, the leaves and the RDAP registry shared by the run tests
   reports.py        # hand-built reports for the output and CLI tests (no network)
@@ -112,6 +114,7 @@ docs/               # stack.md: each technology and why it was chosen
 .githooks/          # versioned pre-commit hook (core.hooksPath)
 .claude/            # Claude Code hooks: format on edit, validate at turn end, guard uv.lock
 .github/            # CI, CodeQL, dependency review, weekly pip-audit, Dependabot, templates
+action.yml          # the composite Action: restore the state, run action.py, save the state
 uv.lock             # never edit by hand (generated; a hook blocks it)
 ```
 
@@ -120,7 +123,9 @@ runs the certificate checks (spec 002) and then the domain checks over RDAP (spe
 renders the report. With `--notify` (spec 005), it also reads the channels' settings from the
 environment before any check, and after the run `notify()` loads the state, asks `alerts.py` what
 each channel has to hear, delivers, and saves the state once. The composite Action in `action.yml`
-(spec 006) is not built yet.
+(spec 006) runs the source of its own commit with the runner's Python 3.12 or later, installs
+nothing, passes every input as a `TLSVIGIL_INPUT_*` variable to `tlsvigil.action`, which calls the
+command's `main()`, and keeps the state in the Actions cache between runs.
 
 ### Before you touch…
 
@@ -146,6 +151,7 @@ each channel has to hear, delivers, and saves the state once. The composite Acti
 | `src/tlsvigil/output.py`, the JSON shape | spec `004` (ADR-4 on escaping outside text, ADR-5 on the JSON schema version); spec `005` (RF-12) for the delivery lines and the `notifications` key |
 | `src/tlsvigil/i18n.py` (a sentence or a key) | spec `004` (ADR-1); `tests/test_i18n.py` fails when a language or a key is missing |
 | `README.md` or `README.pt-BR.md` | the two READMEs rule below, `tests/test_readme_pt_br.py` (headings and table rows, the variables too) and `tests/test_readme_config.py` (the one `toml` block, `[notifications]` included) |
+| `action.yml` or `src/tlsvigil/action.py` | spec `006` (ADR-1 to ADR-5, ADR-8); `tests/test_action_files.py` holds the inputs to `action.INPUTS`, every `uses:` to a SHA, no `${{` in a `run:` |
 | `.github/workflows/` | the comments at the top of each workflow; the ruleset requires the `Quality` checks by name |
 
 ### Do not regress

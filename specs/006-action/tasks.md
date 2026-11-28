@@ -83,33 +83,33 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 2 — `action.yml` and the CI job
 
-- [ ] `action.yml`: the metadata (name, description, author, branding), the inputs in the order of
+- [x] `action.yml`: the metadata (name, description, author, branding), the inputs in the order of
   `action.INPUTS` with their descriptions and defaults, the output `exit-code`, and the three steps
   of the design: the restore and the save of `actions/cache` `v6.1.0` pinned by SHA with the key and
   the prefix of ADR-4, and the Check step with the script of "Interfaces". — RF-01, RF-05, RF-07,
   RF-10, RNF-01, RNF-02, ADR-1, ADR-2, ADR-4
-- [ ] `tests/test_action_files.py`: for `action.yml`: every `uses:` pinned to 40 hexadecimal
+- [x] `tests/test_action_files.py`: for `action.yml`: every `uses:` pinned to 40 hexadecimal
   characters and a version comment, read on the text; no `run:` holding `${{`; the inputs equal to
   `action.INPUTS`, in order, each with a description, each reaching the Check step as its
   `TLSVIGIL_INPUT_*` name; the output's value from the Check step; the save step under `always()`.
   — RF-10, RNF-01, RNF-02, RF-12
-- [ ] `tests/test_action_files.py`: the bootstrap of the Check step, run in a subprocess from a
+- [x] `tests/test_action_files.py`: the bootstrap of the Check step, run in a subprocess from a
   directory that holds a planted `json.py`, still runs `tlsvigil.action` (`-I` keeps the workspace
   off `sys.path`). — ADR-2
-- [ ] `tests/data/action/refused.toml` and `tests/data/action/telegram.toml`: a host on a closed
+- [x] `tests/data/action/refused.toml` and `tests/data/action/telegram.toml`: a host on a closed
   port of `127.0.0.1`; the second with `channels = ["telegram"]`. — RF-12
-- [ ] `.github/workflows/ci.yml`: the "Action" job on `ubuntu-26.04`, `windows-2025` and
+- [x] `.github/workflows/ci.yml`: the "Action" job on `ubuntu-26.04`, `windows-2025` and
   `macos-26`, with a checkout without persisted credentials, the five runs of the test strategy with
   `continue-on-error: true`, and a last step that compares every outcome and `exit-code` and fails on
   any difference; a comment at the top saying it reaches no channel, real host or API. — RF-04,
   RF-07, RF-12, RNF-04, RNF-05
-- [ ] `specs/001-foundation/design.md`: ADR-6 gains `**Superseded by** 006-action, ADR-1.` below its
+- [x] `specs/001-foundation/design.md`: ADR-6 gains `**Superseded by** 006-action, ADR-1.` below its
   title. — ADR-1
-- [ ] See the new tests fail once: a tag in place of a SHA, `${{ inputs.config }}` in the `run:`,
+- [x] See the new tests fail once: a tag in place of a SHA, `${{ inputs.config }}` in the `run:`,
   an input missing from `action.yml`, the save without `always()`, `-I` removed from the bootstrap;
   each goes red, then the change is undone. On the pull request, the "Action" job is seen red once
   with an expected outcome changed, then green. — RF-12, ADR-2
-- [ ] Quality gate. —
+- [x] Quality gate. — ruff, black, mypy and pytest green (1518 tests, 99% coverage)
 
 ## Stage 3 — The template
 

@@ -9,8 +9,8 @@ project and the reasoning behind each piece. The project is not released yet (`1
 the package is the skeleton, the quality gate, the CI, the certificate check, the domain check,
 the `tlsvigil check` command (the configuration, the text and JSON output, the two languages and the
 exit codes) and its `--notify` (the GitHub issue, Telegram and e-mail, with a state file between
-runs). The pieces marked **planned** below (the PyPI release and the composite Action) are not
-built yet.
+runs), and the composite Action that runs it in a workflow. The pieces marked **planned** below
+(the PyPI release and the template repository) are not built yet.
 
 The project is one small program with no runtime dependency:
 
@@ -264,9 +264,12 @@ why a subject or body built from certificate or RDAP text is treated as plain da
 
 ### GitHub Actions: schedule and composite Action
 
-**Planned.** The tool runs from a workflow in the user's own repository, on a daily `cron` schedule,
-on the free minutes of a public repository. A composite Action in `action.yml` wraps the install and
-the run, and an example workflow ships in the repository and in the README.
+**Built (the Action); planned (the template).** The tool runs from a workflow in the user's own
+repository, on a daily `cron` schedule, on the free minutes of a public repository. The composite
+Action in `action.yml` runs the package's source at the commit the workflow pins, with the runner's
+own Python and nothing installed, and keeps the state file between runs in the Actions cache
+(`actions/cache/restore` and `save`, one entry per run, restored by prefix). An example workflow
+will ship in a template repository and in the README.
 
 **Why this:** the product is "zero infrastructure": the user needs no server, and the maintainer
 hosts nothing, so a scheduled workflow in the user's repository is the whole runtime. A composite
@@ -274,7 +277,9 @@ Action (steps in YAML) needs no Docker image or JavaScript, which keeps the supp
 Python code.
 
 **Learn:** the `on.schedule` cron syntax (and that GitHub may start a run late or skip it, so a
-daily check is best effort), `permissions:` for the `GITHUB_TOKEN`, composite Action syntax, and
+daily check is best effort), `permissions:` for the `GITHUB_TOKEN`, composite Action syntax
+(`inputs`, `outputs`, `github.action_path`, `steps.<id>.outputs`), why an input reaches a `run:`
+through `env:` and never as `${{ }}` text, the cache's immutable keys and `restore-keys`, and
 pinning third-party Actions to a commit SHA.
 
 **Docs:** [GitHub Actions](https://docs.github.com/en/actions) ·
@@ -412,7 +417,9 @@ lines of the standard library that the suite tests itself.
 
 `ci.yml` runs the gate (`ruff`, `black --check`, `mypy`, `pytest --cov`) on Python 3.12 to 3.15, on
 Linux and on Windows, plus a `package` job that builds the sdist and wheel, runs `twine check
---strict` and fails if the wheel declares a runtime dependency. Third-party Actions are pinned to a
+--strict` and fails if the wheel declares a runtime dependency, and an `action` job that runs the
+Action from the checkout (`uses: ./`) on Linux, Windows and macOS and compares each run's result.
+Third-party Actions are pinned to a
 commit SHA, and the same gate runs in `.githooks/pre-commit`.
 
 **Why this:** the repository is public, so the minutes are free, and running the same sequence
