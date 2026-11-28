@@ -1,6 +1,6 @@
 ---
 feature: The command — the TOML configuration, the text and JSON output, the language switch and the exit codes
-status: approved
+status: in progress
 date: 2026-11-27
 related:
   - 001-foundation/design.md

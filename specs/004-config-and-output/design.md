@@ -1,6 +1,6 @@
 ---
 feature: The command — the TOML configuration, the text and JSON output, the language switch and the exit codes
-status: approved
+status: in progress
 date: 2026-11-27
 related:
   - 004-config-and-output/requirements.md
@@ -550,3 +550,23 @@ brackets are the only way to give a port to an IPv6 address.
 - **Coverage:** `config.py`, `runner.py`, `output.py`, `i18n.py` and `cli.py` at 100% lines and
   branches; the `lineno` branch of the TOML error that only Python 3.14 and newer reach is marked
   and explained in the code.
+
+## Deviations
+
+1. **RF-08, ADR-1: the plural helper is a public function.** `plural(lang, key, count,
+   **params)` sits beside `translate` in `i18n.py`: it picks `<key>.one` for a count of `1` and
+   `<key>.other` for any other, and fills `count`. A count of days already passed is given as a
+   positive number, so the caller writes "expired 3 days ago" from `3`.
+
+## Implementation notes
+
+- **Stage 0:** `HostProblem` has one member per check of `validate_host` (`empty`, `whitespace`,
+  `url_or_path`, `port_in_host`, `port`); the `/`, `[`, `]` and `@` of a host are one check in
+  spec `002`, so they share `url_or_path`. `DomainProblem` has one member per check of
+  `normalize_domain` (twelve). The sentence of a rule lives under `host.<code>` or
+  `domain.<code>`, and `test_i18n.py` fails when a member has none. The messages of the two
+  exceptions stay the English text of specs `002` and `003`; only the configuration translates.
+  Seen failing: a host with whitespace given `EMPTY` (3 red), an IPv4 domain given `BAD_LABEL`
+  (1 red), the Portuguese `host.empty` removed (2 red), `{count}` renamed `{total}` in Portuguese
+  (2 red), the result formatted a second time (4 red), `domain.too_long` renamed (1 red), and `0`
+  made singular (1 red); each change was undone.

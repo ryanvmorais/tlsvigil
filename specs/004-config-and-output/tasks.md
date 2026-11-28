@@ -1,6 +1,6 @@
 ---
 feature: The command — the TOML configuration, the text and JSON output, the language switch and the exit codes
-status: approved
+status: in progress
 date: 2026-11-27
 related:
   - 004-config-and-output/requirements.md
@@ -21,27 +21,31 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 0 — Validators with a code, and the language module
 
-- [ ] `src/tlsvigil/certificate.py`: `HostProblem` (one member per rule of spec `002`, RF-06) and
+- [x] `src/tlsvigil/certificate.py`: `HostProblem` (one member per rule of spec `002`, RF-06) and
   `InvalidHost(ValueError)` with `code`; the public `validate_host(host, port)` split out of
   `_validate`, which keeps the checks of the timeout and `now`; `check_certificate` unchanged in
   behaviour. — RF-05, ADR-2
-- [ ] `src/tlsvigil/rdap.py`: `DomainProblem` (one member per rule of spec `003`, RF-07) and
+- [x] `src/tlsvigil/rdap.py`: `DomainProblem` (one member per rule of spec `003`, RF-07) and
   `InvalidDomain(ValueError)` with `code`; `_normalize_domain` renamed `normalize_domain` and
   raising `InvalidDomain`; the callers updated. — RF-05, ADR-2
-- [ ] `tests/test_certificate.py` and `tests/test_rdap_validation.py`: each bad host
+- [x] `tests/test_certificate.py` and `tests/test_rdap_validation.py`: each bad host
   and bad domain of the existing tables also asserts its `code`; the existing `ValueError`
   assertions stay. — RF-05, ADR-2
-- [ ] `src/tlsvigil/i18n.py`: `Lang`, `MESSAGES`, `translate(lang, key, **params)` with
+- [x] `src/tlsvigil/i18n.py`: `Lang`, `MESSAGES`, `translate(lang, key, **params)` with
   `format_map`, the plural helper (`days.one`, `days.other`), and the sentences of every
-  `HostProblem` and `DomainProblem` in both languages. — RF-08, ADR-1
-- [ ] `tests/test_i18n.py`: every key has both languages; the two templates of a key name the same
+  `HostProblem` and `DomainProblem` in both languages. — RF-08, ADR-1. The helper is the
+  public `plural()` (deviation 1).
+- [x] `tests/test_i18n.py`: every key has both languages; the two templates of a key name the same
   fields; every member of `HostProblem` and `DomainProblem` has a key; a parameter holding `{0}`
   or `{x}` is printed as it is; `translate` with an unknown key raises `KeyError`. — RF-08,
   RNF-02, ADR-1
-- [ ] See the new tests fail once: one `HostProblem` and one `DomainProblem` given the wrong code,
+- [x] See the new tests fail once: one `HostProblem` and one `DomainProblem` given the wrong code,
   one Portuguese sentence removed, one placeholder renamed in one language, the parameter passed
-  through `format` twice; each goes red, then the change is undone. — RF-05, RF-08
-- [ ] Quality gate. —
+  through `format` twice; each goes red, then the change is undone. — RF-05, RF-08. Also
+  sabotaged, each red on its own test: the sentence of `domain.too_long` renamed, and
+  `plural()` calling `0` singular.
+- [x] Quality gate. — 381 passed (52 new); ruff/black/mypy green; `src` at 100% of lines and
+  branches
 
 ## Stage 1 — The configuration
 
