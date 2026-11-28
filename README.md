@@ -23,8 +23,8 @@ Actions minutes, and opens an issue there when something needs attention.
 
 > **Status:** in development, not released yet; the first release will be `1.0.0`. This README
 > describes the tool as it is specified in [specs/](specs/). Today `tlsvigil check` runs from a
-> clone and prints the result; the GitHub issue, Telegram, e-mail and the Action are specified but
-> not built yet.
+> clone, prints the result and, with `--notify`, delivers it to the GitHub issue, Telegram or
+> e-mail; the Action is specified but not built yet.
 
 ## What it checks
 
@@ -108,26 +108,44 @@ hosts = [
 # Warn when fewer days than this are left (default 30).
 warn_days = 30
 names = ["example.com", "example.com.br"]
+
+[notifications]
+# The channels --notify delivers to, in this order: "github", "telegram", "smtp".
+channels = ["github"]
+
+# Read only when "smtp" is in channels; the user name, the password and the
+# addresses come from environment variables, never from this file.
+[notifications.smtp]
+host = "smtp.example.com"
+port = 587                                        # default: 587 for "starttls", 465 for "tls"
+security = "starttls"
 ```
 
 | Key | Default | What it holds |
 |---|---|---|
-| `lang` | `"en"` | The language of the text output and of the error messages: `"en"` or `"pt-BR"` |
+| `lang` | `"en"` | The language of the text output, of the error messages and of the notifications: `"en"` or `"pt-BR"` |
 | `timeout` | `10` | The seconds each TLS connection and each RDAP request may take, greater than `0` |
 | `certificates.warn_days` | `14` | Warn when a certificate has fewer days left than this (`0` or more) |
 | `certificates.hosts` | none | The hosts to check: `"host"` (port 443), `"host:port"`, `"[IPv6]:port"`, or a table `{ host, port, warn_days }` |
 | `domains.warn_days` | `30` | Warn when a domain registration has fewer days left than this (`0` or more) |
 | `domains.names` | none | The domains to check, or a table `{ name, warn_days }`. Write each domain as registered (`example.com`, not `www.example.com`), and an internationalized name in its `xn--` form |
+| `notifications.channels` | none | The channels `--notify` delivers to, each once: `"github"`, `"telegram"`, `"smtp"` |
+| `notifications.smtp.host` | none | The SMTP server, required when `"smtp"` is listed |
+| `notifications.smtp.port` | `587` or `465` | The server's port, from `1` to `65535`; the default follows `security` |
+| `notifications.smtp.security` | `"starttls"` | `"starttls"` (a plain connection upgraded to TLS before signing in) or `"tls"` (TLS from the first byte); there is no plain-text mode |
 
 An entry's own `warn_days` wins over its table's. The whole file is checked before any connection:
 an unknown key (a typo such as `warn_day`), a value of the wrong type, a host or a domain listed
 twice, or a file with nothing to check stops the run, and each problem is printed with its place
-(such as `certificates.hosts[2]`).
+(such as `certificates.hosts[2]`). A token, a password, a chat or an address written in the file
+(`password`, `to`, `chat_id`...) is refused too, with the name of the environment variable it
+belongs in.
 
 ## Command line
 
 ```text
 tlsvigil check [--config PATH | --host HOST[:PORT]... --domain NAME...] [--json] [--lang en|pt-BR]
+               [--notify [--state PATH]]
 ```
 
 | Option | What it does |
@@ -135,8 +153,10 @@ tlsvigil check [--config PATH | --host HOST[:PORT]... --domain NAME...] [--json]
 | `--config PATH` | Reads this file instead of `tlsvigil.toml` |
 | `--host HOST[:PORT]` | Checks the certificate of this host instead of reading a file; repeat it for more hosts |
 | `--domain NAME` | Checks the registration of this domain instead of reading a file; repeat it for more domains |
-| `--json` | Writes one JSON document (schema version `1`) with every result and a count per status, with the same English keys and values in any language |
-| `--lang en\|pt-BR` | The language of the text output; it wins over the `lang` of the file |
+| `--json` | Writes one JSON document (schema version `1`) with every result and a count per status, with the same English keys and values in any language; with `--notify`, a `notifications` list with the outcome of each channel |
+| `--lang en\|pt-BR` | The language of the text output and of the notifications; it wins over the `lang` of the file |
+| `--notify` | Delivers the result to the channels of `[notifications]` (next section); only with a file, not with `--host` or `--domain` |
+| `--state PATH` | The file where `--notify` keeps what each channel was told (default `.tlsvigil-state.json` in the current directory); only with `--notify` |
 
 The exit code tells a script what happened:
 
@@ -146,6 +166,82 @@ The exit code tells a script what happened:
 | `1` | At least one result needs attention: `expiring`, `invalid` (a certificate that fails verification) or `error` (the check could not finish) |
 | `2` | Nothing was checked: a usage error, a configuration error, or nothing to check |
 | `3` | An internal error (a bug); the traceback is on the standard error |
+| `4` | With `--notify`, a notification could not be delivered, whatever the checks found; the delivery line says why |
+
+## Notifications
+
+With `--notify`, `tlsvigil check` runs the checks as usual and then delivers the result to each
+channel of `[notifications]`, in the order listed:
+
+- **`github`** keeps one issue in the repository of the run: it opens the issue when something
+  needs attention, rewrites its title and body on every run to the current warnings, adds a
+  comment when there is news, and closes it when no warning is left. It touches only the issue it
+  opened, and an issue that you close stays closed until there is news, which opens a new one.
+- **`telegram`** sends one plain-text message to a chat, through a bot of yours.
+- **`smtp`** sends one plain-text e-mail to one or more recipients, over TLS, signed in to the
+  server of `[notifications.smtp]`; a server that does not offer STARTTLS, or whose certificate
+  fails verification, is never sent the user name or the password.
+
+The report is printed as before, with one line per channel right after the summary:
+
+```text
+6 checked: 1 needs attention.
+github: sent (issue #12)
+telegram: nothing new
+smtp: failed: the SMTP server refused 1 recipient
+```
+
+### Secrets and addresses
+
+Tokens, the password, the chat and the e-mail addresses come from environment variables, never
+from the file, and only the variables of the channels listed are read. A missing or malformed
+variable stops the run before any check (exit code `2`), with the variable's name and never its
+value, and none of these values reaches the output, the JSON, the state file or a message.
+
+| Variable | Channel | What it holds |
+|---|---|---|
+| `GITHUB_TOKEN` | `github` | A token that can write issues; in GitHub Actions, `${{ github.token }}` |
+| `GITHUB_REPOSITORY` | `github` | The repository of the issue, as `owner/name`; GitHub Actions sets it |
+| `TLSVIGIL_TELEGRAM_TOKEN` | `telegram` | The token of your bot, as BotFather gives it (`123456:ABC-...`) |
+| `TLSVIGIL_TELEGRAM_CHAT_ID` | `telegram` | The chat: its number (negative for a group) or `@` and the name of a public channel |
+| `TLSVIGIL_SMTP_USERNAME` | `smtp` | The user name that signs in to the server |
+| `TLSVIGIL_SMTP_PASSWORD` | `smtp` | Its password |
+| `TLSVIGIL_SMTP_FROM` | `smtp` | The sender, a bare address (`alerts@example.com`, no display name) |
+| `TLSVIGIL_SMTP_TO` | `smtp` | One or more recipients, separated by commas |
+
+In a workflow, the issue channel needs the permission to write issues and the token in the
+environment of the step; the other values come from the repository's secrets:
+
+```yaml
+permissions:
+  contents: read
+  issues: write
+
+# In the step that runs tlsvigil check --notify:
+env:
+  GITHUB_TOKEN: ${{ github.token }}
+  TLSVIGIL_TELEGRAM_TOKEN: ${{ secrets.TLSVIGIL_TELEGRAM_TOKEN }}
+  TLSVIGIL_TELEGRAM_CHAT_ID: ${{ secrets.TLSVIGIL_TELEGRAM_CHAT_ID }}
+```
+
+### When a channel hears about a warning
+
+A result is a warning when it is `expiring` or `invalid`, or when it is `error` on two runs in a
+row, since one failed connection is often a passing blip; `ok` and `unknown` never are. Each
+channel gets at most one message per run, in the language of the run, and only when it has news:
+
+- **A new warning**, or **a change** of status or of reason (an expiring certificate that has now
+  expired, a host that went from `error` to `invalid`).
+- **A reminder** when the days left reach 14, 7, 3, 1 or 0, counting only the days below the
+  entry's `warn_days`, and once more when a domain is past its date. After late or skipped runs,
+  one reminder for the lowest day reached, none for the days jumped over.
+- **The end of a warning:** resolved when the entry is `ok` again, or ended without being
+  resolved when it can no longer be checked (`unknown`) or is no longer in the configuration.
+
+What each channel was told is kept in the state file (`--state`). Keep that file between runs:
+without it, every run is a first run and each warning is told again, never hidden. A channel whose
+delivery fails keeps what it was told before, so the next run tries again, and the channels that
+succeeded are not told twice.
 
 ## TLSVigil vs. other tools
 

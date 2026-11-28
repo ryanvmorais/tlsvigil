@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from tlsvigil.config import Config, load_config
+from tlsvigil.config import Channel, Config, SmtpSecurity, SmtpServer, load_config
 from tlsvigil.i18n import Lang
 
 # ---------------------------------------------------------------------------
@@ -119,3 +119,14 @@ def test_both_examples_hold_the_same_entries(tmp_path: Path) -> None:
     assert portuguese.hosts == english.hosts
     assert portuguese.domains == english.domains
     assert portuguese.timeout == english.timeout
+    assert portuguese.notifications == english.notifications
+
+
+@_needs_both
+def test_the_english_example_turns_on_the_issue_and_keeps_the_smtp_server(tmp_path: Path) -> None:
+    # The example lists one channel and keeps the [notifications.smtp] table of a channel not
+    # listed, so a reader who copies it with --notify needs only the two GitHub variables.
+    notifications = _load(_ENGLISH, tmp_path).notifications
+    assert notifications is not None
+    assert notifications.channels == (Channel.GITHUB,)
+    assert notifications.smtp == SmtpServer("smtp.example.com", 587, SmtpSecurity.STARTTLS)

@@ -1,6 +1,6 @@
 ---
 feature: The notifications — one GitHub issue, Telegram and e-mail, sent on change and at reminders, never twice for the same thing
-status: approved
+status: done
 date: 2026-11-27
 related:
   - 005-notifications/requirements.md
@@ -835,3 +835,17 @@ which is what RF-10 guards.
   `--state` without `--notify` accepted (1 red), an empty `channels` accepted (1 red), the
   environment heading not used (1 red), `--state` ignored (2 red), the language of the run not
   passed to the channels (1 red), and the failed write of the state not caught (1 red).
+- **Stage 6:** both READMEs gained a section "Notifications" (the three channels, the delivery
+  lines, "Secrets and addresses" with the eight variables and a workflow fragment with
+  `permissions: issues: write`, and "When a channel hears about a warning"), the `[notifications]`
+  table in the one `toml` example (only `github` listed, and the `[notifications.smtp]` table
+  kept, so a copy of it with `--notify` needs only the two GitHub variables), its four keys,
+  `--notify`, `--state` and the exit code `4`. The workflow fragment adds `contents: read`, which
+  a job with `permissions:` loses otherwise and `actions/checkout` needs. `.gitignore` ignores the
+  default state file, `.tlsvigil-state.json`, so a run from a clone does not leave it to be
+  committed. `tests/test_readme_pt_br.py` compares the rows of the variables table too, and
+  `tests/test_readme_config.py` checks that both examples hold the same `notifications` and that
+  the English one lists `github` with the SMTP server of the example. Seen failing (each change
+  undone): a row of the Portuguese variables table removed (1 red), the Portuguese SMTP port
+  changed (1 red), and `smtp` added to the English `channels` (2 red). The traceability check
+  found every RF, RNF and ADR cited defined in this spec and every one with a task.

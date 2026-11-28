@@ -23,6 +23,8 @@ htmlcov/
 # --- 4. CHECK OUTPUT ---
 # What `tlsvigil --json` is redirected to while trying it out. Ephemeral by design.
 tlsvigil-*.json
+# The state file `tlsvigil check --notify` writes by default (--state chooses another).
+.tlsvigil-state.json
 
 # --- 5. SECRETS AND LOCAL CONFIG ---
 # Real secrets (Telegram token, SMTP password) live in the CI's secret store, never in a file.

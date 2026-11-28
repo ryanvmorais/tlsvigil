@@ -6,10 +6,11 @@ and the handful of concepts worth learning first if it is new to you.
 This is not exhaustive: the full version graph is pinned in `uv.lock`, and per-feature decisions
 live in the `### ADR-N` blocks of `specs/*/design.md`. This page is the map: the *shape* of the
 project and the reasoning behind each piece. The project is not released yet (`1.0.0.dev0`): today
-the package is the skeleton, the quality gate, the CI, the certificate check, the domain check and
+the package is the skeleton, the quality gate, the CI, the certificate check, the domain check,
 the `tlsvigil check` command (the configuration, the text and JSON output, the two languages and the
-exit codes). The pieces marked **planned** below are specified for the next specs (the
-notifications and the composite Action) and are not code yet.
+exit codes) and its `--notify` (the GitHub issue, Telegram and e-mail, with a state file between
+runs). The pieces marked **planned** below (the PyPI release and the composite Action) are not
+built yet.
 
 The project is one small program with no runtime dependency:
 
@@ -26,8 +27,13 @@ GitHub Actions schedule (cron)  ──►  tlsvigil check  (CLI, argparse)      
                                                        ▼
                        days left per host and per domain ──► text or JSON, --lang en|pt-BR
                                                        │      + exit code            built
+                                                       ▼  with --notify
+   state file (JSON, os.replace)  ◄──►  what each channel hears (new, changed,
+                                        reminder, resolved, ended)              built
+                                                       │
                                                        ▼
-            one GitHub issue (REST API, GITHUB_TOKEN)  ·  Telegram  ·  SMTP e-mail   planned
+            one GitHub issue (REST API, GITHUB_TOKEN)  ·  Telegram  ·  SMTP e-mail   built
+            https.request(): bounded, no redirect               smtplib + email, TLS
 ```
 
 ---
@@ -138,11 +144,15 @@ run and reuses it for the others. Each request is one `http.client.HTTPSConnecti
 verified with the same context as the certificate check, under one deadline for the whole
 request, with a cap on the size of the answer (2 MiB for the bootstrap, 512 KiB for a domain) and
 no compression. A redirect is followed only on the same scheme, host and port, three times at
-most. Every way a check can end (no RDAP service, no date in the record, a refused connection, a
+most. The exchange itself lives in `https.py` (spec `005`, ADR-1): one `request()` that sends one
+request, reads the body of any status within the cap and the deadline, and follows no redirect;
+the RDAP client keeps its same-origin redirect loop on top of it, and the GitHub and Telegram
+channels use it as it is. Every way a check can end (no RDAP service, no date in the record, a refused connection, a
 body too large) comes back as a value, never as an exception.
 
 **Why this:** against `requests` or `httpx`, the standard library is a dependency less, and the
-traffic is two simple `GET`s. RDAP is the standardised, JSON successor of WHOIS; against parsing
+traffic is a few simple requests: two `GET`s per domain, and a handful of `POST`s and `PATCH`es to
+the notification APIs. RDAP is the standardised, JSON successor of WHOIS; against parsing
 WHOIS text, it needs no per-registry format. Against `urllib.request`, `http.client` has nothing
 to switch off: it reads no proxy variable from the environment, has no `file:` or `ftp:` handler,
 returns a redirect as a status the code looks at, and every error status as a value instead of an
@@ -208,18 +218,45 @@ add a dependency for one subtraction.
 **Docs:** [`json`](https://docs.python.org/3.12/library/json.html) ·
 [`datetime`](https://docs.python.org/3.12/library/datetime.html)
 
-### `smtplib`
+### `os.replace` and the state file
 
-**Planned, optional channel.** Sends the warning by e-mail over TLS, with the password read from the
-CI's secret store.
+`--notify` keeps, in one versioned JSON file (`.tlsvigil-state.json` by default), what each channel
+was last told and how many runs in a row an entry was `error`, so a warning is told once and
+reminded on fixed days instead of on every run. The file is read with a size cap and validated key
+by key; any problem makes the run a first run, which may repeat a warning but never hides one. It
+is written to a temporary file in the same directory (`tempfile.mkstemp`), flushed to disk
+(`os.fsync`) and moved over the old one with `os.replace`, so an interrupted run leaves the old
+file or the new one, never half of it.
+
+**Why this:** against SQLite (`sqlite3`), the state is a few kilobytes read and written once per
+run, and one JSON file is readable and easy to keep between runs. Against writing the file in
+place, the atomic rename costs a few lines.
+
+**Learn:** `os.replace` (atomic on POSIX, and on Windows within one volume), a temporary file in
+the target's directory, `os.fsync`, and why an unknown version is treated as no state at all.
+
+**Docs:** [`os.replace`](https://docs.python.org/3.12/library/os.html#os.replace)
+
+### `smtplib` and `email`
+
+**Optional channel.** `mail.py` sends one plain-text e-mail in UTF-8 per run, over TLS from the
+first byte (`"tls"`) or after `STARTTLS` (`"starttls"`), signed in with the user name and the
+password of the environment. `STARTTLS` is required, never opportunistic: a server that does not
+offer it, or whose certificate fails verification, ends the session before `AUTH`. The message is
+an `email.message.EmailMessage` with the policy `email.policy.SMTP`, which refuses a line break in
+a header. Small subclasses of `smtplib.SMTP` and `SMTP_SSL` put the whole session under one
+deadline (the socket timeout is set to the time left before each line), cap a reply at 100 lines,
+and greet the server as `localhost`, so the runner's name is never looked up or sent.
 
 **Why this:** the standard library already speaks SMTP; an e-mail service SDK would be a dependency
-and tie the tool to one vendor.
+and tie the tool to one vendor, and `aiosmtplib` would add one for a single message per run.
 
-**Learn:** `smtplib.SMTP_SSL` against `starttls()`, `email.message.EmailMessage`, and why a subject
-or body built from certificate or RDAP text is treated as plain data.
+**Learn:** `smtplib.SMTP_SSL` against `starttls(context=...)`, `ehlo()` and `has_extn("starttls")`,
+`email.message.EmailMessage` with `email.policy.SMTP`, `email.utils.make_msgid(domain=...)`, and
+why a subject or body built from certificate or RDAP text is treated as plain data.
 
-**Docs:** [`smtplib`](https://docs.python.org/3.12/library/smtplib.html)
+**Docs:** [`smtplib`](https://docs.python.org/3.12/library/smtplib.html) ·
+[`email`](https://docs.python.org/3.12/library/email.html)
 
 ---
 
@@ -245,31 +282,38 @@ pinning third-party Actions to a commit SHA.
 
 ### The GitHub REST API (issues)
 
-**Planned, default channel.** The result goes to one issue in the user's repository, through the
-`GITHUB_TOKEN` the workflow already has: opened when something needs attention, updated on the next
-runs and closed when everything is fine again, so a problem that lasts a week is one issue, not
-seven.
+**Default channel.** `github.py` keeps one issue in the user's repository, through the
+`GITHUB_TOKEN` the workflow already has: opened when something needs attention, its title and body
+rewritten on every run, a comment added when there is news (the comment is what notifies), and
+closed when everything is fine again, so a problem that lasts a week is one issue, not seven. A run
+finds its issue again by the number in the state file, or by the marker `<!-- tlsvigil -->` at the
+top of the body and the author `github-actions[bot]`; labels are not used, because the API drops
+them in silence for a token with `issues: write` only. A run makes four requests at most, through
+`https.request()`, with the `X-GitHub-Api-Version` header.
 
 **Why this:** against a mail or chat message per run, one self-updating issue needs no credential
 beyond the built-in token, notifies through the GitHub account the user already has and does not
 repeat itself.
 
-**Learn:** the issues endpoints (create, update, list, close), the `issues: write` permission, how
-a run finds its own issue again (a fixed label or marker), and why text from a certificate or an
-RDAP answer reaches the issue as plain text, never as markup, a link or a mention.
+**Learn:** the issues endpoints (create, update, list, close) and the comments endpoint, the
+`issues: write` permission, the REST API versions, and why text from a certificate or an RDAP
+answer reaches the issue inside a code span, never as markup, a link or a mention.
 
 **Docs:** [REST API: issues](https://docs.github.com/en/rest/issues/issues)
 
 ### Telegram Bot API
 
-**Planned, optional channel.** Sends the warning to a Telegram chat through a bot, over HTTPS, with
-the bot token read from the CI's secret store.
+**Optional channel.** `telegram.py` sends one message per run to a chat through a bot, with one
+`POST` to `sendMessage` through `https.request()`, as plain text (no `parse_mode`) and with link
+previews off, the bot token and the chat read from the environment.
 
-**Why this:** it is free, needs no server and reaches a phone; the call is one `POST`, so `urllib`
-is enough and no Telegram library is needed.
+**Why this:** it is free, needs no server and reaches a phone; the call is one `POST`, so the
+shared HTTPS exchange is enough and no Telegram library is needed.
 
-**Learn:** creating a bot with BotFather, `sendMessage` and the chat id, and keeping the token out
-of every log line and error message.
+**Learn:** creating a bot with BotFather, `sendMessage` and the chat id, `link_preview_options`,
+and keeping the token out of every log line and error message: it sits in the URL, so a message
+never quotes the URL, and the Redactor removes the token and its percent-encoded form from every
+text the command writes.
 
 **Docs:** [core.telegram.org/bots/api](https://core.telegram.org/bots/api)
 
@@ -341,7 +385,10 @@ Authority Key Identifier, in `tests/certs.py`). A threaded server in `tests/tls_
 them on `127.0.0.1` and `::1`, a second one in `tests/http_server.py` serves hand-written RDAP
 documents over HTTPS (and the answers that misbehave: silent, dripping, endless), and an autouse
 guard (`tests/network_guard.py`) fails any lookup or
-connection that leaves the loopback interface. Both packages are in the dev group only: the wheel
+connection that leaves the loopback interface. The notification tests add stateful fakes of the
+GitHub and Telegram APIs on that HTTPS server (`tests/fake_apis.py`) and an SMTP server written on
+`socketserver` (`tests/smtp_server.py`, spec `005`, ADR-11), with implicit TLS, `STARTTLS` and
+replies that misbehave. Both packages are in the dev group only: the wheel
 still declares no dependency.
 
 **Why this:** against certificates committed to the repository, a certificate made at run time can
@@ -421,7 +468,8 @@ broken on its first day does not reach the lock.
 
 ## What is deliberately not in the stack
 
-- **requests, httpx** — nicer HTTP clients, but each is a dependency; two `GET`s and a `POST` do not need one.
+- **requests, httpx** — nicer HTTP clients, but each is a dependency; a few `GET`s, `POST`s and `PATCH`es do not need one.
+- **PyGithub, python-telegram-bot** — API client libraries, each a dependency for the one to four requests of a run.
 - **cryptography, pyOpenSSL at run time** — would parse a certificate in detail; the `ssl` module already returns the date and verifies the chain. `cryptography` is in the dev group only, to make test certificates.
 - **click, typer, rich** — nice command lines, but each is a dependency; `argparse` does the job.
 - **PyYAML, pydantic** — a YAML configuration needs a dependency and a safe loader; TOML with `tomllib` and a hand-written check is enough for a small, fixed shape.
