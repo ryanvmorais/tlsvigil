@@ -2,7 +2,8 @@
 Tests for the text and the JSON output (spec 004, RF-06, RF-07, RNF-02, RNF-03, RNF-05).
 
 The reports are built by hand (``reports.py``) with dates counted from a fixed time, so the
-expected text is written out in full; no server and no connection is involved.
+expected text is written out in full; no server and no connection is involved. The deliveries of
+``--notify`` (spec 005, RF-12) are built by hand too.
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ import pytest
 
 import reports
 from tlsvigil import __version__, certificate, rdap
+from tlsvigil.config import Channel
+from tlsvigil.delivery import Delivery, DeliveryOutcome
 from tlsvigil.i18n import Lang
 from tlsvigil.output import NAME_WIDTH_CAP, SCHEMA_VERSION, printable, render_json, render_text
 from tlsvigil.runner import STATUSES, Report
@@ -477,3 +480,124 @@ def test_the_exit_code_is_written_as_given() -> None:
 
     assert json.loads(render_json(report, 0))["exit_code"] == 0
     assert json.loads(render_json(report, 3))["exit_code"] == 3
+
+
+# ---------------------------------------------------------------------------
+# The deliveries (spec 005, RF-12)
+# ---------------------------------------------------------------------------
+
+# One delivery of each outcome, in the order of a [notifications] table.
+DELIVERIES = (
+    Delivery(Channel.GITHUB, DeliveryOutcome.SENT, None, 12),
+    Delivery(Channel.TELEGRAM, DeliveryOutcome.UNCHANGED),
+    Delivery(Channel.SMTP, DeliveryOutcome.FAILED, "the SMTP server refused the sign-in (535)"),
+)
+
+
+def test_the_deliveries_follow_the_summary_in_english() -> None:
+    text = render_text(EXAMPLE, Lang.EN, DELIVERIES)
+
+    assert text == render_text(EXAMPLE, Lang.EN) + (
+        "github: sent (issue #12)\n"
+        "telegram: nothing new\n"
+        "smtp: failed: the SMTP server refused the sign-in (535)\n"
+    )
+
+
+def test_the_deliveries_follow_the_summary_in_portuguese() -> None:
+    text = render_text(EXAMPLE, Lang.PT_BR, DELIVERIES)
+
+    assert text.splitlines()[-4:] == [
+        "6 verificados: 3 precisam de atenção.",
+        "github: enviado (issue #12)",
+        "telegram: nada de novo",
+        "smtp: falhou: the SMTP server refused the sign-in (535)",
+    ]
+
+
+def test_an_issue_brought_up_to_date_is_named_with_nothing_new() -> None:
+    delivery = Delivery(Channel.GITHUB, DeliveryOutcome.UNCHANGED, None, 7)
+
+    last = render_text(EXAMPLE, Lang.EN, (delivery,)).splitlines()[-1]
+
+    assert last == "github: nothing new (issue #7)"
+
+
+def test_a_failure_names_its_reason_and_not_the_issue() -> None:
+    delivery = Delivery(Channel.GITHUB, DeliveryOutcome.FAILED, "GitHub refused it (403)", 7)
+
+    last = render_text(EXAMPLE, Lang.EN, (delivery,)).splitlines()[-1]
+
+    assert last == "github: failed: GitHub refused it (403)"
+
+
+def test_the_reason_of_a_failure_is_escaped() -> None:
+    # A server's reply reaches the reason; a line break in it must not start a line of its own.
+    reason = "refused\ngithub: sent"
+    delivery = Delivery(Channel.SMTP, DeliveryOutcome.FAILED, reason)
+
+    lines = render_text(EXAMPLE, Lang.EN, (delivery,)).splitlines()
+
+    assert lines[-1] == "smtp: failed: " + printable(reason)
+    assert lines[-2] == "6 checked: 3 need attention."
+
+
+def test_a_report_without_items_ends_with_its_summary_and_the_deliveries() -> None:
+    text = render_text(reports.report(), Lang.EN, DELIVERIES[1:2])
+
+    assert text == "0 checked: 0 need attention.\ntelegram: nothing new\n"
+
+
+@pytest.mark.parametrize("lang", list(Lang))
+def test_without_deliveries_the_text_is_that_of_spec_004(lang: Lang) -> None:
+    text = render_text(EXAMPLE, lang, ())
+
+    assert text == render_text(EXAMPLE, lang)
+    assert text.splitlines()[-1].startswith("6 ")
+
+
+@pytest.mark.parametrize(
+    ("delivery", "expected"),
+    [
+        (
+            DELIVERIES[0],
+            {"channel": "github", "outcome": "sent", "message": None, "issue": 12},
+        ),
+        (
+            DELIVERIES[1],
+            {"channel": "telegram", "outcome": "unchanged", "message": None, "issue": None},
+        ),
+        (
+            DELIVERIES[2],
+            {
+                "channel": "smtp",
+                "outcome": "failed",
+                "message": "the SMTP server refused the sign-in (535)",
+                "issue": None,
+            },
+        ),
+    ],
+    ids=["sent", "unchanged", "failed"],
+)
+def test_each_outcome_in_the_document(delivery: Delivery, expected: dict[str, object]) -> None:
+    document = json.loads(render_json(EXAMPLE, 4, (delivery,)))
+
+    assert document["notifications"] == [expected]
+    assert list(document["notifications"][0]) == ["channel", "outcome", "message", "issue"]
+
+
+def test_the_notifications_come_last_in_the_order_of_the_channels() -> None:
+    document = json.loads(render_json(EXAMPLE, 4, DELIVERIES))
+
+    assert list(document)[-1] == "notifications"
+    channels = [entry["channel"] for entry in document["notifications"]]
+    assert channels == ["github", "telegram", "smtp"]
+    assert document["schema_version"] == SCHEMA_VERSION == 1
+
+
+def test_without_deliveries_the_document_is_that_of_spec_004() -> None:
+    # The control: with a delivery, the key is there.
+    assert "notifications" in json.loads(render_json(EXAMPLE, 1, DELIVERIES[:1]))
+
+    assert render_json(EXAMPLE, 1, ()) == render_json(EXAMPLE, 1)
+    assert "notifications" not in json.loads(render_json(EXAMPLE, 1))

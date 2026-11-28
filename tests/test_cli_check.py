@@ -693,6 +693,7 @@ def test_every_key_the_command_writes_is_in_the_catalogue() -> None:
     assert keys == {
         "cli.file_heading",
         "cli.names_heading",
+        "cli.environment_heading",
         "cli.missing_hint",
         "cli.internal_error",
     }

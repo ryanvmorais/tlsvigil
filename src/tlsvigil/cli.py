@@ -5,7 +5,10 @@ Built on :mod:`argparse` so the package keeps its zero-dependency promise (spec 
 ``tlsvigil check`` loads the configuration (the file or the ``--host`` and ``--domain`` flags),
 runs the checks, writes the report as text or JSON and turns it into an exit code: ``0`` when
 nothing needs attention, ``1`` when something does, ``2`` when nothing could be checked, and
-``3`` for a bug (ADR-3).
+``3`` for a bug (ADR-3). With ``--notify`` it also reads the channels' settings from the
+environment, delivers the result (spec 005) and exits ``4`` when a delivery failed; from the
+moment the settings exist, every text it writes passes through the
+:class:`~tlsvigil.environment.Redactor` (spec 005, ADR-7).
 
 :func:`main` takes the argument list and returns the exit code instead of exiting, which lets
 the tests drive it in-process. Its keyword-only arguments are the test seams (ADR-7): no flag and
@@ -19,25 +22,31 @@ import os
 import ssl
 import sys
 import traceback
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Final
 
-from tlsvigil import __version__, rdap
+from tlsvigil import __version__, github, rdap, telegram
 from tlsvigil.config import (
     DEFAULT_CONFIG,
     Config,
     ConfigError,
+    Problem,
     config_from_names,
     load_config,
 )
+from tlsvigil.delivery import Delivery, DeliveryOutcome
+from tlsvigil.environment import ChannelSettings, Redactor, read_settings
 from tlsvigil.i18n import Lang, translate
+from tlsvigil.notify import notify
 from tlsvigil.output import printable, render_json, render_text
 from tlsvigil.runner import run
+from tlsvigil.state import DEFAULT_STATE
 
 __all__ = [
     "EXIT_ATTENTION",
+    "EXIT_DELIVERY",
     "EXIT_INTERNAL",
     "EXIT_OK",
     "EXIT_USAGE",
@@ -57,6 +66,8 @@ EXIT_ATTENTION: Final = 1
 EXIT_USAGE: Final = 2
 # A bug: neither 0 nor 1, so a script never reads a crash as a result (ADR-3).
 EXIT_INTERNAL: Final = 3
+# With --notify, a delivery failed, whatever the checks found (spec 005, RF-12).
+EXIT_DELIVERY: Final = 4
 
 # The spellings `--lang` accepts, in any case (RF-08).
 _LANGS: Final = {lang.lower(): lang for lang in Lang}
@@ -114,7 +125,8 @@ def _parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
             "Check every host and domain of tlsvigil.toml (or of --config), or only the names "
             "given with --host and --domain. Exit codes: 0 when nothing needs attention, 1 "
             "when something expires soon, is invalid or could not be checked, 2 when nothing "
-            "was checked (a usage or configuration error), 3 for an internal error."
+            "was checked (a usage or configuration error), 3 for an internal error, 4 when a "
+            "notification could not be delivered (with --notify, whatever the checks found)."
         ),
     )
     check.add_argument(
@@ -143,6 +155,17 @@ def _parsers() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         type=_lang,
         metavar="{en,pt-BR}",
         help="the language of the output (default: the file's lang, else en)",
+    )
+    check.add_argument(
+        "--notify",
+        action="store_true",
+        help="deliver the result to the channels of the file's [notifications] table",
+    )
+    check.add_argument(
+        "--state",
+        type=Path,
+        metavar="PATH",
+        help=f"the state file of --notify (default: {DEFAULT_STATE} in the current directory)",
     )
     return parser, check
 
@@ -177,6 +200,19 @@ def _escape_unencodable() -> None:
             reconfigure(errors="backslashreplace")
 
 
+def _identity(text: str) -> str:
+    """
+    Leave a text as it is: the redaction before the settings of the channels exist.
+
+    Args:
+        text (str): Any text about to be written.
+
+    Returns:
+        str: The same text.
+    """
+    return text
+
+
 def _write_report(text: str) -> None:
     """
     Write the report to the standard output, even when the reader has gone.
@@ -202,7 +238,14 @@ def _write_report(text: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _write_problems(error: ConfigError, lang: Lang, config: Path | None, names: bool) -> None:
+def _write_problems(
+    error: ConfigError,
+    lang: Lang,
+    config: Path | None,
+    names: bool,
+    *,
+    environment: bool = False,
+) -> None:
     """
     Write every problem of the configuration to the standard error (RF-02, RF-05).
 
@@ -211,8 +254,12 @@ def _write_problems(error: ConfigError, lang: Lang, config: Path | None, names: 
         lang (Lang): The language of the messages.
         config (Path | None): The ``--config`` value; ``None`` for the default file.
         names (bool): Whether the names came from ``--host`` and ``--domain``.
+        environment (bool): Whether the problems are the variables of the channels (spec 005,
+            RF-03); each is placed at the variable's name and none holds its value.
     """
-    if names:
+    if environment:
+        lines = [translate(lang, "cli.environment_heading")]
+    elif names:
         lines = [translate(lang, "cli.names_heading")]
     else:
         path = printable(str(config if config is not None else DEFAULT_CONFIG))
@@ -228,7 +275,12 @@ def _write_problems(error: ConfigError, lang: Lang, config: Path | None, names: 
         )
 
     # Only the default file gets the hint: a path given by hand was meant to exist.
-    if config is None and not names and error.problems[0].message == "config.missing":
+    if (
+        config is None
+        and not names
+        and not environment
+        and error.problems[0].message == "config.missing"
+    ):
         lines.append(translate(lang, "cli.missing_hint", path=DEFAULT_CONFIG))
 
     sys.stderr.write("\n".join(lines) + "\n")
@@ -247,7 +299,7 @@ def _load(args: argparse.Namespace) -> Config:
         args (argparse.Namespace): The parsed ``check`` arguments.
 
     Returns:
-        Config: The validated configuration.
+        Config: The validated configuration; with ``--notify``, one that lists a channel.
 
     Raises:
         ConfigError: With every problem found.
@@ -255,7 +307,29 @@ def _load(args: argparse.Namespace) -> Config:
     if args.host or args.domain:
         # The names replace the file: it is not read, even when it exists (RF-03).
         return config_from_names(args.host, args.domain)
-    return load_config(args.config if args.config is not None else Path(DEFAULT_CONFIG))
+    config = load_config(args.config if args.config is not None else Path(DEFAULT_CONFIG))
+    if args.notify and (config.notifications is None or not config.notifications.channels):
+        # Checked after the file validates, so a file with other problems lists those first.
+        problem = Problem("notifications.channels", "config.no_channel")
+        raise ConfigError([problem], config.lang)
+    return config
+
+
+def _exit_code(attention: bool, deliveries: Sequence[Delivery]) -> int:
+    """
+    Turn the result of a run into the exit code (RF-09; spec 005, RF-12).
+
+    Args:
+        attention (bool): Whether a result needs attention.
+        deliveries (Sequence[Delivery]): The deliveries of ``--notify``; empty without it.
+
+    Returns:
+        int: :data:`EXIT_DELIVERY` when a delivery failed, else :data:`EXIT_ATTENTION` or
+            :data:`EXIT_OK`.
+    """
+    if any(delivery.outcome is DeliveryOutcome.FAILED for delivery in deliveries):
+        return EXIT_DELIVERY
+    return EXIT_ATTENTION if attention else EXIT_OK
 
 
 def main(
@@ -264,6 +338,9 @@ def main(
     context: ssl.SSLContext | None = None,
     bootstrap_url: str = rdap.BOOTSTRAP_URL,
     now: datetime | None = None,
+    environ: Mapping[str, str] | None = None,
+    github_api_url: str = github.API_URL,
+    telegram_api_url: str = telegram.API_URL,
 ) -> int:
     """
     Run the command line.
@@ -276,10 +353,14 @@ def main(
         bootstrap_url (str): The URL of the IANA bootstrap. Only the tests change it (ADR-7).
         now (datetime | None): The time to count the days left from; ``None`` means the clock.
             Only the tests pass it (ADR-7).
+        environ (Mapping[str, str] | None): Where ``--notify`` reads the channels' variables;
+            ``None`` means :data:`os.environ`. Only the tests pass it (spec 005, ADR-9).
+        github_api_url (str): The root of the GitHub REST API. Only the tests change it.
+        telegram_api_url (str): The root of the Telegram Bot API. Only the tests change it.
 
     Returns:
-        int: :data:`EXIT_OK`, :data:`EXIT_ATTENTION`, :data:`EXIT_USAGE` or
-            :data:`EXIT_INTERNAL`.
+        int: :data:`EXIT_OK`, :data:`EXIT_ATTENTION`, :data:`EXIT_USAGE`,
+            :data:`EXIT_INTERNAL` or :data:`EXIT_DELIVERY`.
 
     Raises:
         SystemExit: From :mod:`argparse`, for ``--version``, ``--help`` and invalid arguments,
@@ -297,8 +378,15 @@ def main(
     if args.config is not None and names:
         # Not a mutually exclusive group: argparse would then refuse --host with --domain too.
         check.error("argument --host/--domain: not allowed with argument --config")
+    if args.notify and names:
+        # The names carry no [notifications] table, so there is nothing to notify (RF-01).
+        check.error("argument --notify: not allowed with argument --host/--domain")
+    if args.state is not None and not args.notify:
+        check.error("argument --state: only allowed with argument --notify")
 
     lang: Lang = args.lang or Lang.EN
+    # Every text is written through it; it knows the secrets once the settings are read.
+    redact: Callable[[str], str] = _identity
     try:
         try:
             config = _load(args)
@@ -309,14 +397,52 @@ def main(
             return EXIT_USAGE
 
         lang = args.lang or config.lang or Lang.EN
+        settings: ChannelSettings | None = None
+        if args.notify and config.notifications is not None:
+            try:
+                settings = read_settings(
+                    config.notifications, os.environ if environ is None else environ
+                )
+            except ConfigError as error:
+                _write_problems(error, lang, args.config, names, environment=True)
+                return EXIT_USAGE
+            redact = Redactor(settings.private_values())
+
         report = run(config, context=context, bootstrap_url=bootstrap_url, now=now)
-        exit_code = EXIT_ATTENTION if report.needs_attention() else EXIT_OK
-        text = render_json(report, exit_code) if args.json else render_text(report, lang)
+        deliveries: tuple[Delivery, ...] = ()
+        if settings is not None:
+
+            def warn(line: str) -> None:
+                """
+                Write a line about the state file, cleaned like every other text (ADR-7).
+
+                Args:
+                    line (str): The translated line; its path comes from the command line.
+                """
+                sys.stderr.write(redact(line) + "\n")
+
+            deliveries = notify(
+                report,
+                config,
+                settings,
+                args.state if args.state is not None else Path(DEFAULT_STATE),
+                lang=lang,
+                warn=warn,
+                context=context,
+                github_api_url=github_api_url,
+                telegram_api_url=telegram_api_url,
+            )
+        exit_code = _exit_code(report.needs_attention(), deliveries)
+        if args.json:
+            text = render_json(report, exit_code, deliveries)
+        else:
+            text = render_text(report, lang, deliveries)
     except Exception:
-        # A bug: one line a person can read, and the traceback for the report (ADR-3).
+        # A bug: one line a person can read, and the traceback for the report (ADR-3), which
+        # may quote a URL or a header, so it is formatted first and redacted (spec 005, ADR-7).
         sys.stderr.write(translate(lang, "cli.internal_error") + "\n")
-        traceback.print_exc(file=sys.stderr)
+        sys.stderr.write(redact(traceback.format_exc()))
         return EXIT_INTERNAL
 
-    _write_report(text)
+    _write_report(redact(text))
     return exit_code
