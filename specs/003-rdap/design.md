@@ -480,6 +480,16 @@ domain object, and the `.br` and `.com` answers carry it.
    a string is `invalid_response`, like an unreadable date. A date that `fromisoformat` reads but
    that leaves the range of `datetime` once moved to UTC (`OverflowError`) is out of range.
 
+7. **RF-05: a `ValueError` of `http.client` is `other`.** A host or a path that `http.client`
+   cannot encode (a bootstrap URL with a character outside ASCII in its path) raises a
+   `ValueError`, not an `HTTPException`; it joins the last row of the table, so the check still
+   returns a result.
+8. **ADR-3, ADR-4: the body is read until the answer closes.** `http.client` closes the answer,
+   and the socket under it, at the end of the body (its `Content-Length`, its last chunk, or the
+   close of the connection), so the loop runs while the answer is open instead of until an empty
+   read, and the timeout of the socket is never set on a closed one. The messages of `404` and
+   `429` carry the code as well (`HTTP 404: …`), like the `http` kind.
+
 ## Implementation notes
 
 - **Stage 0:** `LocalHTTPServer` is `http.server.ThreadingHTTPServer` with `daemon_threads` off,
@@ -495,3 +505,8 @@ domain object, and the `.br` and `.com` answers carry it.
   `context` argument and `check_domain` arrive with the request in Stage 2. Until then the tests
   call the private functions (`_normalize_domain`, `_validate_now`, `_parse_bootstrap`,
   `_read_domain_answer`) directly. The 183 tests of the stage run in under half a second.
+- **Stage 2:** `RdapClient` takes its `context` and gains `check_domain`, `_get_bootstrap` and
+  `_get`; `_get` opens one `HTTPSConnection` per turn of the redirect loop and keeps the socket
+  that `http.client` hands to the answer, to set its timeout to the time left before the status
+  line and before each read. `test_rdap_check.py` holds 35 tests against the local server; the
+  slowest is the refused connection, about 2 s on the Windows loopback, as in spec `002`.

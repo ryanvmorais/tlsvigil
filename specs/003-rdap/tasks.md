@@ -92,42 +92,52 @@ The quality gate of every stage is, in order: `uv run ruff check .`, `uv run bla
 
 ## Stage 2 — The request and the check against the local server
 
-- [ ] `src/tlsvigil/rdap.py`: `_get(url, cap)`: the deadline, `HTTPSConnection` with
+- [x] `src/tlsvigil/rdap.py`: `_get(url, cap)`: the deadline, `HTTPSConnection` with
   `create_context()` (or the given context), the request headers, the redirect loop on the same
   scheme, host and port up to `MAX_REDIRECTS`, the `Content-Length` check, the bounded `read1`
   loop, the exception and status table of the design; the connection closed in every branch.
   — RF-05, RF-06, RNF-01, RNF-02, RNF-04, ADR-2 to ADR-6
-- [ ] `src/tlsvigil/rdap.py`: `RdapClient.check_domain`: validation, the lazy bootstrap with its
+- [x] `src/tlsvigil/rdap.py`: `RdapClient.check_domain`: validation, the lazy bootstrap with its
   failure kept, `no_rdap_service` without a request, the domain request and the reading of the
   answer; every failure of the bootstrap fetch as `ERROR bootstrap` with its message. — RF-01,
   RF-03, RF-04, RF-05, ADR-1
-- [ ] `tests/test_rdap_check.py`, dated and undated: a dated answer with `expiration`, days left,
+- [x] `tests/test_rdap_check.py`, dated and undated: a dated answer with `expiration`, days left,
   `registry_name`, `statuses` and `server`; `no_expiration`; `no_rdap_service` for an absent
   top-level domain and for an `http://` only service, with no domain request recorded, and a
   covered domain as the control that one is. — RF-01, RF-03, RF-09
-- [ ] `tests/test_rdap_check.py`, bootstrap: two domains through one client and one bootstrap
+- [x] `tests/test_rdap_check.py`, bootstrap: two domains through one client and one bootstrap
   request recorded; a bootstrap answering `500`, one that is not JSON and one with a malformed
   `services`, each giving `bootstrap` with no domain request recorded. — RF-04, RF-09
-- [ ] `tests/test_rdap_check.py`, errors: `404`, `429` (one request recorded), `503` (`HTTP 503`
+- [x] `tests/test_rdap_check.py`, errors: `404`, `429` (one request recorded), `503` (`HTTP 503`
   in the message); a bound-then-closed port (`refused`, timeout 5 s); `silent` and `drip` with a
   timeout of 0.3 s (`timeout`); a leaf the client does not trust (`tls`); `getaddrinfo` patched to
   raise `gaierror` (`dns`); each asserting the kind, a message and `None` for `days_left`. — RF-05,
-  RF-09, RNF-05
-- [ ] `tests/test_rdap_check.py`, bounds and redirects: a `Content-Length` of 600 KiB and the
+  RF-09, RNF-05. Also: the deadline passing before the body is read, on a clock patched in the
+  module only; a client without a context, whose bootstrap fails verification; a path that
+  `http.client` cannot encode (`other`, deviation 7); a bad name and a naive `now` sending no
+  request, with a good call on the same client as the control.
+- [x] `tests/test_rdap_check.py`, bounds and redirects: a `Content-Length` of 600 KiB and the
   `endless` route (`too_large`); a redirect to `localhost` for `127.0.0.1`, to `http://` and to
   another port (`redirect`, and the target recorded no request); one and three same-host
-  redirects followed; a fourth refused. — RF-06, RNF-04, RF-09, ADR-4, ADR-5
-- [ ] `tests/test_rdap_check.py`, requests: the recorded `User-Agent: tlsvigil/<version>` and
+  redirects followed; a fourth refused. — RF-06, RNF-04, RF-09, ADR-4, ADR-5. Also: a port out of
+  range and a redirect without `Location` (`redirect`), and a chunked body read whole.
+- [x] `tests/test_rdap_check.py`, requests: the recorded `User-Agent: tlsvigil/<version>` and
   `Accept: application/rdap+json`, and no `Cookie`, `Authorization` or `Proxy-Authorization`; with
   `HTTPS_PROXY` and `ALL_PROXY` set to a documentation address, the local server is still reached
   (positive control) and the guard records no connection to that address. — RF-06, RF-09
-- [ ] See the new tests fail once: drop the bootstrap cache, remove the same-host test of the
+- [x] See the new tests fail once: drop the bootstrap cache, remove the same-host test of the
   redirect, remove the `Content-Length` check and the running total, remove the deadline check,
   map every `SSLError` to `other`, send the request through `urllib.request.urlopen`; each goes red
-  on the test that guards it, then the change is undone. — RF-04 to RF-06
-- [ ] Coverage of `src/tlsvigil/rdap.py` at 100% of lines and branches, or each missing branch
-  marked and explained in the code. — RF-09
-- [ ] Quality gate. — <result>
+  on the test that guards it, then the change is undone. — RF-04 to RF-06. The `Content-Length`
+  check and the running total were removed one at a time (`invalid_response` and `timeout`
+  instead of `too_large`); without the deadline the `drip` check was still running after 3 s;
+  through `urlopen` the guard refused a connection to the proxy address. Also sabotaged: the
+  bootstrap fetched before the name is validated, red on the bad-argument test.
+- [x] Coverage of `src/tlsvigil/rdap.py` at 100% of lines and branches, or each missing branch
+  marked and explained in the code. — RF-09. One `pragma: no cover`: the socket that
+  `http.client` always leaves after `request()`.
+- [x] Quality gate. — 329 passed (35 new) in 21 s; ruff/black/mypy green; `src` at 100% of lines
+  and branches
 
 ## Stage 3 — Documentation and closing
 
