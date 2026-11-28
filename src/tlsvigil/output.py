@@ -6,16 +6,22 @@ value from the outside (a certificate, an RDAP answer, an error message, the con
 through :func:`printable` first, so no control or format character reaches the terminal (RNF-02,
 ADR-4). :func:`render_json` writes one ASCII document whose keys never depend on the status or the
 language (RNF-03, RNF-05, ADR-5).
+
+With ``--notify`` (spec 005, RF-12) both outputs also carry the deliveries: one line per channel
+after the summary, and the ``notifications`` key of the document. Without it they are those of
+spec 004, byte for byte.
 """
 
 from __future__ import annotations
 
 import json
 import unicodedata
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Final
 
 from tlsvigil import __version__
+from tlsvigil.delivery import Delivery, DeliveryOutcome
 from tlsvigil.i18n import Lang, plural, translate
 from tlsvigil.runner import STATUSES, CertificateItem, DomainItem, Report
 
@@ -200,17 +206,42 @@ def _domain_detail(item: DomainItem, lang: Lang) -> str:
     return days_detail(lang, "domain", result.days_left, result.expiration)
 
 
-def render_text(report: Report, lang: Lang) -> str:
+def _delivery_line(delivery: Delivery, lang: Lang) -> str:
+    """
+    Write what one channel did with its plan (spec 005, RF-12).
+
+    Args:
+        delivery (Delivery): The delivery.
+        lang (Lang): The language of the output.
+
+    Returns:
+        str: ``github: sent (issue #12)``, ``telegram: nothing new`` or ``smtp: failed: <why>``;
+            the channel is its identifier, and the reason is escaped like any outside text,
+            since it may quote a server's answer.
+    """
+    if delivery.outcome is DeliveryOutcome.FAILED:
+        outcome = translate(lang, "delivery.failed", message=printable(delivery.message or ""))
+    else:
+        outcome = translate(lang, f"delivery.{delivery.outcome}")
+        if delivery.issue is not None:
+            outcome = translate(lang, "delivery.issue", outcome=outcome, number=delivery.issue)
+    return f"{delivery.channel}: {outcome}"
+
+
+def render_text(report: Report, lang: Lang, deliveries: Sequence[Delivery] = ()) -> str:
     """
     Write the report for a person: one line per item, then the summary (RF-06).
 
     Args:
         report (Report): The report of a run.
         lang (Lang): The language of the output.
+        deliveries (Sequence[Delivery]): The deliveries of ``--notify``, in the order of the
+            channels; empty without it (spec 005, RF-12).
 
     Returns:
-        str: The lines, the certificates first, a blank line and the summary, ending in a
-            newline. Every value from the outside is escaped by :func:`printable`.
+        str: The lines, the certificates first, a blank line, the summary and one line per
+            delivery, ending in a newline. Every value from the outside is escaped by
+            :func:`printable`.
     """
     rows = [
         (str(item.status), display_name(item), _certificate_detail(item, lang))
@@ -234,8 +265,9 @@ def render_text(report: Report, lang: Lang) -> str:
     checked = plural(lang, "checked", counts["total"])
     attention = plural(lang, "attention", counts["attention"])
     summary = translate(lang, "summary", checked=checked, attention=attention)
+    sent = [_delivery_line(delivery, lang) for delivery in deliveries]
     # A blank line sets the summary apart from the items; with no item there is nothing to part.
-    return "\n".join([*lines, "", summary] if lines else [summary]) + "\n"
+    return "\n".join([*lines, "", summary, *sent] if lines else [summary, *sent]) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -310,13 +342,36 @@ def _domain_object(item: DomainItem) -> dict[str, object]:
     }
 
 
-def render_json(report: Report, exit_code: int) -> str:
+def _delivery_object(delivery: Delivery) -> dict[str, object]:
+    """
+    Give the JSON object of one delivery (spec 005, RF-12).
+
+    Args:
+        delivery (Delivery): The delivery.
+
+    Returns:
+        dict[str, object]: ``channel`` and ``outcome`` as English identifiers, ``message``
+            (the reason of a failure, in the language of the run, else ``null``) and ``issue``
+            (``null`` but for the GitHub issue written to); every key always present.
+    """
+    return {
+        "channel": str(delivery.channel),
+        "outcome": str(delivery.outcome),
+        "message": delivery.message,
+        "issue": delivery.issue,
+    }
+
+
+def render_json(report: Report, exit_code: int, deliveries: Sequence[Delivery] = ()) -> str:
     """
     Write the report for a program: one JSON document, the same in every language (RF-07).
 
     Args:
         report (Report): The report of a run.
         exit_code (int): The exit code the command ends with.
+        deliveries (Sequence[Delivery]): The deliveries of ``--notify``, in the order of the
+            channels; empty without it, and then the ``notifications`` key is absent, so its
+            presence says notifications were asked for (spec 005, RF-12).
 
     Returns:
         str: The document, pure ASCII (RNF-03), indented by two spaces, ending in a newline.
@@ -331,4 +386,7 @@ def render_json(report: Report, exit_code: int) -> str:
         "certificates": [_certificate_object(item) for item in report.certificates],
         "domains": [_domain_object(item) for item in report.domains],
     }
+    if deliveries:
+        # Added within schema version 1: a new key, nothing renamed (spec 004, RNF-05).
+        document["notifications"] = [_delivery_object(delivery) for delivery in deliveries]
     return json.dumps(document, ensure_ascii=True, indent=2) + "\n"

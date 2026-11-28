@@ -415,6 +415,16 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
         Lang.EN: 'security must be "starttls" or "tls"',
         Lang.PT_BR: 'security deve ser "starttls" ou "tls"',
     },
+    "config.no_channel": {
+        Lang.EN: (
+            "--notify needs at least one channel here: "
+            'list "github", "telegram" or "smtp" in [notifications]'
+        ),
+        Lang.PT_BR: (
+            "--notify precisa de pelo menos um canal aqui: "
+            'liste "github", "telegram" ou "smtp" em [notifications]'
+        ),
+    },
     "config.secret_key": {
         Lang.EN: (
             "a secret or an address does not belong in the file; "
@@ -731,6 +741,24 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
             "a próxima execução pode repetir uma notificação."
         ),
     },
+    # The line of each delivery after the summary (spec 005, RF-12): "github: sent (issue #12)",
+    # "telegram: nothing new", "smtp: failed: <why>"; the channel is its identifier.
+    "delivery.sent": {
+        Lang.EN: "sent",
+        Lang.PT_BR: "enviado",
+    },
+    "delivery.unchanged": {
+        Lang.EN: "nothing new",
+        Lang.PT_BR: "nada de novo",
+    },
+    "delivery.failed": {
+        Lang.EN: "failed: {message}",
+        Lang.PT_BR: "falhou: {message}",
+    },
+    "delivery.issue": {
+        Lang.EN: "{outcome} (issue #{number})",
+        Lang.PT_BR: "{outcome} (issue #{number})",
+    },
     # The command (RF-02, RF-03; ADR-3): the headings of a configuration error, the hint of a
     # missing default file, and the line before the traceback of a bug.
     "cli.file_heading": {
@@ -751,6 +779,14 @@ MESSAGES: Final[Mapping[str, Mapping[Lang, str]]] = {
         Lang.PT_BR: (
             "Diga o que verificar com --host HOST[:PORTA] ou --domain NOME, "
             "ou crie um arquivo {path} nesta pasta."
+        ),
+    },
+    "cli.environment_heading": {
+        Lang.EN: (
+            "Nothing was checked: the environment variables of the notifications cannot be used."
+        ),
+        Lang.PT_BR: (
+            "Nada foi verificado: as variáveis de ambiente das notificações não podem ser usadas."
         ),
     },
     "cli.internal_error": {
